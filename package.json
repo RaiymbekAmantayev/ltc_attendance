@@ -1,0 +1,21 @@
+{
+  "name": "ltc-teacher-cabinet",
+  "version": "0.3.0",
+  "description": "LTC — личный кабинет преподавателя (Telegram Mini App + админка)",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "init-db": "node scripts/init-db.js",
+    "test": "node --test --test-concurrency=1",
+    "seed-demo": "node scripts/seed-demo.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^5.0.0",
+    "mysql2": "^3.11.0"
+  }
+}

@@ -1,0 +1,34 @@
+const hollihop = require('../services/hollihopService');
+const lessons = require('../services/lessonService');
+const submissions = require('../services/submissionService');
+const stats = require('../services/statsService');
+const Submission = require('../models/submissionModel');
+const { AppError } = require('../middleware/errorHandler');
+const { rules, lowFillThreshold } = require('../config/env');
+const testing = require('../config/testing');
+
+exports.me = (req, res) => res.json({
+  name: req.teacher.full_name, lang: req.teacher.lang, role: req.teacher.role,
+  canMark: !!req.teacher.id, rules, lowFillThreshold,
+  testing: { typeId: submissions.testTypeFor(req.teacher), skills: testing.skillsFor(submissions.testTypeFor(req.teacher)) },
+});
+
+exports.listLessons = async (req, res) => {
+  const date = lessons.isDate(req.query.date) ? req.query.date : lessons.todayIso();
+  res.json(await lessons.lessonsWithStatus(req.teacher, date));
+};
+
+exports.groupStudents = async (req, res) => {
+  const { id } = req.params, { date } = req.query;
+  if (!lessons.isDate(date) || !(await lessons.canAccessGroup(req.teacher, id, date))) throw new AppError(403, 'forbidden');
+
+  const saved = await Submission.findByGroupAndDate(id, date);
+  res.json({
+    students: await hollihop.students(id),
+    submitted: saved ? { status: saved.status, payload: Submission.parse(saved.payload) } : null,
+  });
+};
+
+exports.saveLesson = async (req, res) => res.json(await submissions.save(req.teacher, req.body || {}));
+
+exports.profile = async (req, res) => res.json(await stats.profile(req.teacher));

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex">
+  <title>LTC · Админка кабинета преподавателя</title>
+  <link rel="icon" href="/assets/logo.webp" type="image/webp">
+  <link rel="stylesheet" href="/assets/brand.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="app">
+    <header class="appbar">
+      <img class="brand-logo" src="/assets/logo.webp" alt="LTC">
+      <div class="brand-txt"><div class="brand-title">LTC · Админка</div><div class="brand-sub">Личный кабинет преподавателя · Учебный отдел</div></div>
+      <div class="spacer"></div>
+      <button class="iconbtn" data-act="theme" aria-label="Тема" title="Тема"></button>
+    </header>
+    <div class="segbar" role="tablist" id="tabs"></div>
+    <main class="content" id="main"></main>
+    <footer class="foot">LTC · Учебный отдел · Админка · доступ по паролю, действия пишутся в аудит-лог</footer>
+  </div>
+  <script src="/assets/common.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,289 @@
+/* LTC · Админка: обзор, преподаватели и роли, замены, отметки, аудит, правила. Basic-auth на стороне сервера. */
+(function () {
+  const { $, $$, on, esc } = LTC;
+  const main = $('#main'), root = document.getElementById('app');
+
+  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['audit', 'Аудит'], ['rules', 'Правила']];
+  const STATUS = { done: ['good', '✅ В HollyHop'], pending: ['warn', '⏳ Ждёт отправки'], partial: ['warn', '⚠️ Частично'], attention: ['bad', '⚠️ Нужно внимание'] };
+  const ROLE = { teacher: 'Преподаватель', coordinator: 'Координатор', director: 'Директор' };
+  const ACTION = {
+    save: 'Отметка сохранена', synced: 'Записано в HollyHop', retry: 'Повтор отправки', attention: 'Нужно внимание',
+    teacher_create: 'Сотрудник добавлен', teacher_update: 'Сотрудник изменён', teacher_import: 'Импорт из HollyHop',
+    substitution_add: 'Замена назначена', substitution_remove: 'Замена снята',
+  };
+  const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
+  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '' }, auditAction: '', q: '', roleFilter: '' };
+  const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 17: 'Discipline/Engagement' }, 132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 18: 'Дисциплина/Активность' } };
+  const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
+  const parse = v => (typeof v === 'string' ? JSON.parse(v) : v);
+
+  async function api(path, { method = 'GET', body } = {}) {
+    const res = await fetch('/admin-api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    let data = {};
+    try { data = await res.json(); } catch { /* пустой ответ */ }
+    if (!res.ok) throw new Error(data.error || 'Ошибка ' + res.status);
+    return data;
+  }
+
+  /* ---------- Каркас ---------- */
+  LTC.initTheme(null);
+  $('[data-act="theme"]').innerHTML = LTC.icons.sun + LTC.icons.moon;
+  $('#tabs').innerHTML = TABS.map(([id, label]) => `<button class="segbtn" role="tab" data-tab="${id}" aria-selected="false">${esc(label)}</button>`).join('');
+
+  const views = {};
+  async function show(tab) {
+    state.tab = tab;
+    $$('.segbtn').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    main.innerHTML = LTC.loader;
+    try { await views[tab](); }
+    catch (e) { main.innerHTML = `<div class="empty err">${esc(e.message)}<br><br><button class="btn ghost" data-act="reload">Повторить</button></div>`; }
+  }
+  on(root, 'click', '[data-tab]', el => show(el.dataset.tab));
+  on(root, 'click', '[data-act="theme"]', () => LTC.toggleTheme(null));
+  on(root, 'click', '[data-act="reload"]', () => show(state.tab));
+
+  /* ---------- Период ---------- */
+  const preset = name => {
+    const today = LTC.localToday();
+    return name === 'today' ? { preset: name, from: today, to: today }
+      : name === 'week' ? { preset: name, from: LTC.addDays(today, -6), to: today }
+      : { preset: 'month', from: LTC.monthStart(today), to: today };
+  };
+  state.period = preset('month');
+  const periodBar = () => {
+    const p = state.period, pill = (id, label) => `<button class="pill ${p.preset === id ? 'active' : ''}" data-preset="${id}">${label}</button>`;
+    return `<div class="toolbar">${pill('today', 'Сегодня')}${pill('week', 'Неделя')}${pill('month', 'Месяц')}
+      <input type="date" id="p-from" value="${p.from}"><span class="mut">—</span><input type="date" id="p-to" value="${p.to}">
+      <button class="btn sm" data-act="period-go">Показать</button></div>`;
+  };
+  on(root, 'click', '[data-preset]', el => { state.period = preset(el.dataset.preset); show(state.tab); });
+  on(root, 'click', '[data-act="period-go"]', () => {
+    const f = $('#p-from').value, t = $('#p-to').value;
+    if (f && t) { state.period = { preset: 'custom', from: f <= t ? f : t, to: f <= t ? t : f }; show(state.tab); }
+  });
+  const qs = () => `from=${state.period.from}&to=${state.period.to}`;
+
+  /* ---------- Обзор ---------- */
+  let teacherStats = [];
+  views.overview = async () => {
+    const [ov, today, ts] = await Promise.all([api('/overview?' + qs()), api('/today'), api('/teacher-stats?' + qs())]);
+    teacherStats = ts;
+    const k = ov.kpi, s = ov.statuses, pend = today.pending || [];
+    main.innerHTML = `
+      ${periodBar()}
+      <div class="kpi-grid wide">
+        <div class="kpi"><div class="kpi-label">Занятий отмечено</div><div class="kpi-value">${k.lessons}</div><div class="kpi-sub">${k.teachersWorking} из ${k.activeTeachers} преподавателей</div></div>
+        <div class="kpi"><div class="kpi-label">Учеников отмечено</div><div class="kpi-value">${k.students}</div></div>
+        <div class="kpi ${LTC.sev(k.attendanceRate)}"><div class="kpi-label">Посещаемость</div><div class="kpi-value">${LTC.pct(k.attendanceRate)}</div></div>
+        <div class="kpi ${LTC.sev(k.onTimeRate, 70, 90)}"><div class="kpi-label">Отмечено в день урока</div><div class="kpi-value">${LTC.pct(k.onTimeRate)}</div><div class="kpi-sub">цель пилота — задать</div></div>
+        <div class="kpi ${LTC.sev(k.syncedRate, 80, 95)}"><div class="kpi-label">Записано в HollyHop</div><div class="kpi-value">${LTC.pct(k.syncedRate)}</div></div>
+        <div class="kpi ${LTC.sev(k.testPassRate, 60, 80)}"><div class="kpi-label">Порог теста</div><div class="kpi-value">${LTC.pct(k.testPassRate)}</div><div class="kpi-sub">средний тест ${LTC.pct(k.avgTest)}</div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><div class="card-title">Сегодня ${today.error ? '<span class="chip warn">расписание HollyHop недоступно</span>' : `<span class="chip ${pend.length ? 'warn' : 'good'}">${today.marked} / ${today.expected}</span>`}</div>
+          ${today.error ? '' : pend.length ? `<div class="msec-title">Ещё не отмечено</div>` + pend.map(g => `<div class="mrow"><span>${esc(g.name)}<br><span class="mut">${esc([g.branch, g.time].filter(Boolean).join(' · '))}</span></span><span class="v">${esc(g.teacher || '')}${g.substitution ? ' <span class="chip brand">замена</span>' : ''}</span></div>`).join('') : '<p class="hint">Все занятия отмечены</p>'}
+        </div>
+        <div class="card"><div class="card-title">Отметки по дням</div>${LTC.vbars(ov.byDay.slice(-31).map(d => ({ label: LTC.short(d.date), value: d.count })))}</div>
+        <div class="card"><div class="card-title">Посещаемость</div>${LTC.hbars([
+          { label: 'Был', value: ov.attendance.present, sev: 'sev-ok' }, { label: 'Опоздал', value: ov.attendance.late, sev: 'sev-warn' }, { label: 'Пропуск', value: ov.attendance.absent, sev: 'sev-crit' }])}
+          <p class="hint" style="margin-top:10px">Из пропусков уважительных: ${ov.attendance.excused}</p></div>
+        <div class="card"><div class="card-title">Статусы записи</div>${LTC.hbars([
+          { label: 'В HollyHop', value: s.done, sev: 'sev-ok' }, { label: 'Ждёт отправки', value: s.pending, sev: 'sev-warn' },
+          { label: 'Частично', value: s.partial, sev: 'sev-warn' }, { label: 'Нужно внимание', value: s.attention, sev: 'sev-crit' }])}</div>
+      </div>
+      <div class="card"><div class="card-title">Проблемные отметки</div>
+        ${ov.problems.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа</th><th class="left">Автор</th><th class="left">Статус</th><th class="left">Ошибка</th><th></th></tr>
+          ${ov.problems.map(p => `<tr><td>${esc(p.date)}</td><td class="left">${esc(p.group)}</td><td class="left">${esc(p.teacher)}</td><td class="left">${chip(p.status)}</td>
+            <td class="left"><span class="mut">${esc(p.error || '')}</span></td><td class="act"><button class="btn sm" data-retry="${esc(p.key)}">Повторить</button></td></tr>`).join('')}</table></div>`
+          : '<div class="empty">✅ Проблем нет</div>'}
+      </div>
+      <div class="card"><div class="card-title">Преподаватели за период <button class="btn ghost sm" data-act="csv-tstats" style="margin-left:auto">📥 CSV</button></div>
+        <div class="tscroll"><table><tr><th>Преподаватель</th><th>Занятий</th><th>Учеников</th><th>Посещ.</th><th>В день урока</th><th>В HollyHop</th><th>Проблем</th><th>Последнее</th></tr>
+          ${ts.map(x => `<tr class="${x.active ? '' : 'off'}"><td class="left"><span class="tcell-name">${esc(x.name)}</span><br><span class="mut">${esc(x.branch || '')}${x.hasTelegram ? '' : ' · нет Telegram ID'}</span></td>
+            <td>${x.lessons}</td><td>${x.students}</td><td class="${LTC.sev(x.attendance)}">${LTC.pct(x.attendance)}</td><td class="${LTC.sev(x.onTime, 70, 90)}">${LTC.pct(x.onTime)}</td>
+            <td>${x.done}</td><td class="${x.problems ? 'sev-crit' : ''}">${x.problems}</td><td>${esc(x.last || '—')}</td></tr>`).join('')}</table></div>
+      </div>`;
+  };
+  on(root, 'click', '[data-act="csv-tstats"]', () => LTC.csv(`LTC_teachers_${state.period.from}_${state.period.to}.csv`,
+    ['Преподаватель', 'Филиал', 'Занятий', 'Учеников', 'Посещаемость %', 'В день урока %', 'В HollyHop', 'Проблем', 'Последнее занятие'],
+    teacherStats.map(x => [x.name, x.branch, x.lessons, x.students, x.attendance, x.onTime, x.done, x.problems, x.last])));
+  on(root, 'click', '[data-retry]', async el => {
+    el.disabled = true;
+    try { const r = await api(`/submissions/${el.dataset.retry}/retry`, { method: 'POST' }); LTC.toast('Статус: ' + (STATUS[r.status]?.[1] || r.status), r.status === 'done' ? 'good' : 'bad'); show(state.tab); }
+    catch (e) { LTC.toast(e.message, 'bad'); el.disabled = false; }
+  });
+
+  /* ---------- Преподаватели ---------- */
+  let teachers = [];
+  const teacherRows = () => {
+    const q = state.q.toLowerCase();
+    return teachers.filter(t => (!q || String(t.full_name || '').toLowerCase().includes(q)) && (!state.roleFilter || t.role === state.roleFilter));
+  };
+  const paintTeachers = () => {
+    const list = teacherRows();
+    $('#ttable').innerHTML = `<tr><th class="left">ФИО</th><th class="left">Роль</th><th class="left">Telegram ID</th><th class="left">HollyHop ID</th><th class="left">Филиал</th><th>Язык</th><th>Активен</th><th></th></tr>` +
+      list.map(t => `<tr class="${t.active ? '' : 'off'}"><td class="left tcell-name">${esc(t.full_name)}</td><td class="left">${esc(ROLE[t.role])}</td>
+        <td class="left">${t.telegram_id ? esc(t.telegram_id) : '<span class="err">нет</span>'}</td><td class="left">${esc(t.hollihop_id || '—')}</td><td class="left">${esc(t.branch || '')}</td>
+        <td>${t.lang === 'en' ? 'EN' : 'RU'}</td><td>${t.active ? '✅' : '—'}</td><td class="act"><button class="btn ghost sm" data-edit="${t.id}">Изменить</button></td></tr>`).join('');
+  };
+  views.teachers = async () => {
+    teachers = await api('/teachers');
+    main.innerHTML = `
+      <div class="toolbar">
+        <button class="btn" data-act="add-teacher">+ Добавить</button>
+        <button class="btn ghost" data-act="import">Подтянуть из HollyHop</button>
+        <input type="search" id="tsearch" placeholder="Поиск по ФИО" value="${esc(state.q)}">
+        <select id="trole"><option value="">Все роли</option>${Object.entries(ROLE).map(([k, v]) => `<option value="${k}" ${state.roleFilter === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn ghost sm" data-act="csv-teachers" style="margin-left:auto">📥 CSV</button>
+      </div>
+      <p class="note">Без Telegram ID вход невозможен. Неактивные скрыты от приложения. Директору и координатору HollyHop ID не нужен — они видят разделы руководства.</p>
+      <div class="card"><div class="tscroll"><table id="ttable"></table></div></div>`;
+    paintTeachers();
+  };
+  on(root, 'input', '#tsearch', el => { state.q = el.value; paintTeachers(); });
+  on(root, 'change', '#trole', el => { state.roleFilter = el.value; paintTeachers(); });
+  on(root, 'click', '[data-act="csv-teachers"]', () => LTC.csv('LTC_staff.csv', ['ФИО', 'Роль', 'Telegram ID', 'HollyHop ID', 'Филиал', 'Язык', 'Активен'],
+    teacherRows().map(t => [t.full_name, ROLE[t.role], t.telegram_id, t.hollihop_id, t.branch, t.lang, t.active ? 'да' : 'нет'])));
+
+  const teacherForm = t => `
+    <div class="form-grid">
+      <label class="full">ФИО<input id="f-name" value="${esc(t.full_name)}" placeholder="Иванова Анна"></label>
+      <label>Telegram ID (число)<input id="f-tg" inputmode="numeric" value="${esc(t.telegram_id)}"></label>
+      <label>HollyHop ID<input id="f-hh" value="${esc(t.hollihop_id)}"></label>
+      <label>Филиал<input id="f-branch" value="${esc(t.branch)}"></label>
+      <label>Роль<select id="f-role">${Object.entries(ROLE).map(([k, v]) => `<option value="${k}" ${t.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <label>Язык интерфейса<select id="f-lang"><option value="ru" ${t.lang !== 'en' ? 'selected' : ''}>Local → русский</option><option value="en" ${t.lang === 'en' ? 'selected' : ''}>Foreign → English</option></select></label>
+      <label class="check"><input type="checkbox" id="f-active" ${t.active ? 'checked' : ''}> активен</label>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn grow" data-act="save-teacher" data-id="${t.id || 0}">Сохранить</button><button class="btn ghost" data-modal-close>Отмена</button></div>`;
+  const editTeacher = id => {
+    const t = teachers.find(x => x.id === id) || { lang: 'ru', active: 1, role: 'teacher' };
+    LTC.modal.open(id ? 'Редактирование' : 'Новый сотрудник', teacherForm(t));
+  };
+  on(document.body, 'click', '[data-edit]', el => editTeacher(Number(el.dataset.edit)));
+  on(document.body, 'click', '[data-act="add-teacher"]', () => editTeacher());
+  on(document.body, 'click', '[data-act="save-teacher"]', async el => {
+    try {
+      await api('/teachers', { method: 'POST', body: {
+        id: Number(el.dataset.id) || undefined, full_name: $('#f-name').value, telegram_id: $('#f-tg').value, hollihop_id: $('#f-hh').value,
+        branch: $('#f-branch').value, role: $('#f-role').value, lang: $('#f-lang').value, active: $('#f-active').checked } });
+      LTC.modal.close(); LTC.toast('Сохранено', 'good'); show('teachers');
+    } catch (e) { LTC.toast(e.message, 'bad'); }
+  });
+  on(root, 'click', '[data-act="import"]', async () => {
+    try { const { added } = await api('/teachers/import', { method: 'POST' }); LTC.toast(`Добавлено новых: ${added}. Они неактивны — впишите Telegram ID и включите «активен».`, 'good'); show('teachers'); }
+    catch (e) { LTC.toast(e.message, 'bad'); }
+  });
+
+  /* ---------- Замены ---------- */
+  views.subs = async () => {
+    const [all, subs] = await Promise.all([api('/teachers'), api('/substitutions')]);
+    const options = all.filter(t => t.active && t.role === 'teacher').map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('');
+    main.innerHTML = `
+      <div class="card"><div class="card-title">Замена на дату</div>
+        <p class="hint">Заменяющий увидит группу только в этот день. В журнале фиксируется реальный автор отметки.</p>
+        <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow">${options}</select>
+        <button class="btn" data-act="add-sub">Назначить</button></div></div>
+      <div class="card"><div class="card-title">Последние замены</div>
+        ${subs.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа (ID)</th><th class="left">Заменяет</th><th></th></tr>
+          ${subs.map(x => `<tr><td>${esc(x.lesson_date)}</td><td class="left">${esc(x.group_id)}</td><td class="left">${esc(x.full_name)}</td><td class="act"><button class="btn ghost sm" data-rm-sub="${x.id}">Убрать</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Замен нет</div>'}</div>`;
+    loadGroups();
+  };
+  async function loadGroups() {
+    const select = $('#s-group'); if (!select) return;
+    select.innerHTML = '<option>загрузка…</option>';
+    try {
+      const groups = await api('/groups?date=' + $('#s-date').value);
+      select.innerHTML = groups.length ? groups.map(g => `<option value="${esc(g.id)}">${esc(g.name)} · ${esc(g.branch)} ${esc(g.time)}</option>`).join('') : '<option value="">в этот день занятий нет</option>';
+    } catch (e) { select.innerHTML = `<option value="">${esc(e.message)}</option>`; }
+  }
+  on(root, 'change', '#s-date', loadGroups);
+  on(root, 'click', '[data-act="add-sub"]', async () => {
+    try { await api('/substitutions', { method: 'POST', body: { group_id: $('#s-group').value, lesson_date: $('#s-date').value, substitute_id: $('#s-teacher').value } }); LTC.toast('Замена назначена', 'good'); show('subs'); }
+    catch (e) { LTC.toast(e.message, 'bad'); }
+  });
+  on(root, 'click', '[data-rm-sub]', async el => { await api('/substitutions/' + el.dataset.rmSub, { method: 'DELETE' }); show('subs'); });
+
+  /* ---------- Отметки ---------- */
+  let submissions = [];
+  views.subm = async () => {
+    const f = state.subm;
+    if (!f.from) { f.from = LTC.addDays(LTC.localToday(), -6); f.to = LTC.localToday(); }
+    const params = new URLSearchParams({ from: f.from, to: f.to, status: f.status });
+    submissions = await api('/submissions?' + params);
+    main.innerHTML = `
+      <div class="toolbar">
+        <input type="date" id="m-from" value="${f.from}"><span class="mut">—</span><input type="date" id="m-to" value="${f.to}">
+        <select id="m-status"><option value="">Все статусы</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${esc(v[1])}</option>`).join('')}</select>
+        <span class="mut">${submissions.length} записей</span>
+        <button class="btn ghost sm" data-act="csv-subm" style="margin-left:auto">📥 CSV</button>
+      </div>
+      <div class="card"><div class="tscroll"><table><tr><th>Занятие</th><th class="left">Группа</th><th class="left">Автор</th><th class="left">Статус</th><th class="left">Данные</th><th></th></tr>
+        ${submissions.map((x, i) => { const p = parse(x.payload); return `<tr><td>${esc(x.lesson_date)}</td>
+          <td class="left">${esc(x.group_name || x.group_id)}<br><span class="mut">${esc(x.group_id)}</span></td><td class="left">${esc(x.full_name)}</td>
+          <td class="left">${chip(x.status)}${x.last_error ? `<br><span class="mut">${esc(x.last_error)}</span>` : ''}</td>
+          <td class="left"><button class="btn ghost sm" data-detail="${i}">${p.students.length} уч.${p.topic ? ' · ' + esc(p.topic.slice(0, 24)) : ''}</button></td>
+          <td class="act">${x.status !== 'done' ? `<button class="btn sm" data-retry="${esc(x.idem_key)}">Повторить</button>` : ''}</td></tr>`; }).join('')}</table></div>
+        ${submissions.length ? '' : '<div class="empty">Нет отметок за период</div>'}</div>`;
+  };
+  on(root, 'change', '#m-from', el => { state.subm.from = el.value; show('subm'); });
+  on(root, 'change', '#m-to', el => { state.subm.to = el.value; show('subm'); });
+  on(root, 'change', '#m-status', el => { state.subm.status = el.value; show('subm'); });
+  on(root, 'click', '[data-detail]', el => {
+    const x = submissions[Number(el.dataset.detail)], p = parse(x.payload), pr = parse(x.progress) || [];
+    const label = { present: 'Был', late: 'Опоздал', absent: 'Пропуск' };
+    LTC.modal.open(`${x.group_name || x.group_id} · ${x.lesson_date}`, `
+      <div class="mrow"><span class="k">Автор</span><span class="v">${esc(x.full_name)}</span></div>
+      <div class="mrow"><span class="k">Сохранено</span><span class="v">${esc(x.created_at)} UTC</span></div>
+      <div class="mrow"><span class="k">Тема</span><span class="v">${esc(p.topic || '—')}</span></div>
+      <div class="mrow"><span class="k">Шагов записано</span><span class="v">${pr.length}</span></div>
+      <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
+      <div class="msec-title">Ученики (ID HollyHop)</div>
+      <div class="tscroll"><table><tr><th>ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th><th class="left">Комментарий</th></tr>
+      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}${s.status === 'absent' ? (s.excused ? ' (ув.)' : ' (неув.)') : ''}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td><td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+  });
+  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Причина', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Discipline/Engagement, 17', 'Дисциплина/Активность, 18', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.status === 'absent' ? (s.excused ? 'уважительная' : 'неуважительная') : '', s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[17], s.skills?.[18], s.comment]); })));
+
+  /* ---------- Аудит ---------- */
+  views.audit = async () => {
+    const [rows, cfg] = await Promise.all([api('/audit?action=' + encodeURIComponent(state.auditAction)), api('/config')]);
+    main.innerHTML = `
+      <div class="toolbar"><select id="a-action"><option value="">Все действия</option>${Object.entries(ACTION).map(([k, v]) => `<option value="${k}" ${state.auditAction === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>
+        <span class="mut">Срок хранения: ${cfg.auditRetentionDays} дн. — старше удаляется автоматически. Показаны последние 300.</span></div>
+      <div class="card"><div class="tscroll"><table><tr><th>Время (UTC)</th><th class="left">Кто</th><th class="left">Действие</th><th class="left">Группа</th><th>Дата</th><th class="left">Детали</th></tr>
+        ${rows.map(a => `<tr><td>${esc(a.created_at)}</td><td class="left">${esc(a.full_name || a.actor || '—')}${a.actor ? `<br><span class="mut">${esc(a.actor)}</span>` : ''}</td>
+          <td class="left">${esc(ACTION[a.action] || a.action)}</td><td class="left">${esc(a.group_id || '')}</td><td>${esc(a.lesson_date || '')}</td>
+          <td class="left"><span class="mut">${esc(typeof a.detail === 'string' ? a.detail : JSON.stringify(a.detail))}</span></td></tr>`).join('')}</table></div>
+        ${rows.length ? '' : '<div class="empty">Записей нет</div>'}</div>`;
+  };
+  on(root, 'change', '#a-action', el => { state.auditAction = el.value; show('audit'); });
+
+  /* ---------- Правила (только чтение: задаются в .env) ---------- */
+  views.rules = async () => {
+    const c = await api('/config');
+    const yes = v => (v ? 'да' : 'нет');
+    main.innerHTML = `
+      <div class="card"><div class="card-title">Правила ввода (разд. 5 ТЗ)</div>
+        <dl class="kv">
+          <dt>Тест обязателен</dt><dd>${yes(c.rules.testRequired)} <span class="mut">TEST_REQUIRED</span></dd>
+          <dt>Типы теста HollyHop</dt><dd>Foreign (EN) → ${c.testing.testTypeIds.foreign} · Local (RU) → ${c.testing.testTypeIds.local}</dd>
+          <dt>Навыки и баллы</dt><dd>${Object.entries(c.testing.skillsByType).map(([type, list]) => `<b>${type}</b>: ${list.map(k => `${esc(k.name)} (№${k.id}): 0–${k.max}${k.default != null ? `, по умолч. ${k.default}` : ''}${k.pass != null ? `, порог ${k.pass}` : ''}`).join(' · ')}`).join('<br>')}</dd>
+          <dt>Тест пишется для групп</dt><dd>${c.testing.edUnitIds.length ? esc(c.testing.edUnitIds.join(', ')) : 'для всех'} <span class="mut">HH_TEST_EDUNIT_IDS</span></dd>
+          <dt>Комментарий обязателен</dt><dd>${yes(c.rules.commentRequired)} <span class="mut">COMMENT_REQUIRED</span></dd>
+          <dt>Макс. длина комментария</dt><dd>${c.rules.commentMaxLen} <span class="mut">COMMENT_MAX_LEN</span></dd>
+        </dl><p class="note" style="margin-top:12px">Тест и комментарий требуются только от тех, кто был на уроке; тест считается заполненным, когда введены баллы навыков «Домашнее задание» и «Дисциплина» (навык 8 по умолчанию 45). Менять — в файле .env, затем перезапустить сервер.</p></div>
+      <div class="card"><div class="card-title">Система</div>
+        <dl class="kv">
+          <dt>Часовой пояс отдела</dt><dd>${esc(c.timezone)} <span class="mut">APP_TZ</span></dd>
+          <dt>Хранение аудит-лога</dt><dd>${c.auditRetentionDays} дн. <span class="mut">AUDIT_RETENTION_DAYS</span></dd>
+          <dt>Порог «убыточной» группы</dt><dd>&lt; ${c.lowFillThreshold} уч. <span class="mut">LOW_FILL_THRESHOLD</span></dd>
+          <dt>Директоров из .env</dt><dd>${c.directors} <span class="mut">DIRECTOR_TG_IDS</span></dd>
+          <dt>HollyHop</dt><dd>${c.mock ? '<span class="chip warn">демо-режим (HH_MOCK=1)</span>' : '<span class="chip good">боевое подключение</span>'}</dd>
+        </dl></div>
+      <div class="card"><div class="card-title">Как это работает (кратко)</div>
+        <p class="hint">Одно «Сохранить» = тема + посещаемость каждого ученика + оценки. Повторное нажатие не создаёт дублей, сохранённую отметку изменить нельзя. При сбое сети данные ждут в телефоне; при сбое HollyHop сервер досылает недостающее каждую минуту. Если у ключа нет прав на запись — статус «Нужно внимание», кнопка «Повторить» доступна на вкладках «Обзор» и «Отметки».</p></div>`;
+  };
+
+  show('overview');
+})();
