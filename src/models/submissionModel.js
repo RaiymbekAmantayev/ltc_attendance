@@ -28,7 +28,7 @@ exports.summaryByGroup = async (date, groupIds) => {
 exports.progressOf = row => {
   const payload = exports.parse(row.payload), progress = exports.parse(row.progress) || [];
   let total = payload.topic ? 1 : 0;
-  for (const s of payload.students) total += 1 + (s.skills ? 1 : 0);
+  for (const s of payload.students) total += 1 + (s.skills ? 1 : 0) + (s.personalSkills && payload.personal ? 1 : 0);
   return { total, done: Math.min(progress.length, total) };
 };
 

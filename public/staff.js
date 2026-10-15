@@ -72,7 +72,6 @@
       <div class="card"><div class="card-title">${esc(t.attendance)}</div>
         ${LTC.hbars([
           { label: t.present, value: ov.attendance.present, sev: 'sev-ok' },
-          { label: t.late, value: ov.attendance.late, sev: 'sev-warn' },
           { label: t.absent, value: ov.attendance.absent, sev: 'sev-crit' },
         ])}
       </div>

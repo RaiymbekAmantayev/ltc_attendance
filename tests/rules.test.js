@@ -11,18 +11,18 @@ before(async () => {
 });
 after(() => api.close());
 
-const save = (list, group = '9001') => api.request('POST', '/api/lessons', { tg: 3001, body: { key: h.uuid(), groupId: group, date: h.WED, topic: '', students: list } });
-const SK = { 13: 4, 18: 5 };
+const save = (list, group = '9001', topic = '') => api.request('POST', '/api/lessons', { tg: 3001, body: { key: h.uuid(), groupId: group, date: h.WED, topic, students: list } });
+const SK = { 13: 4, 9: 5, 10: 5 };
 
-test('правила из разд. 5 ТЗ: тест и комментарий обязательны только для присутствовавших', async () => {
+test('правила из разд. 5 ТЗ: тест и комментарий (= тема урока) обязательны только для присутствовавших', async () => {
   assert.equal((await save([{ id: '900101', status: 'present', comment: 'ok' }])).json.error, 'test_required');
   assert.equal((await save([{ id: '900101', status: 'present', skills: SK }])).json.error, 'comment_required');
   const absent = await save([{ id: '900101', status: 'absent', excused: false }]);
   assert.equal(absent.status, 200);                                                // пропустившему тест не нужен
 });
 
-test('длинный комментарий обрезается до COMMENT_MAX_LEN', async () => {
-  const ok = await save([{ id: '900301', status: 'present', skills: SK, comment: 'x'.repeat(100) }], '9003');
+test('комментарий (= тема урока) обрезается до COMMENT_MAX_LEN', async () => {
+  const ok = await save([{ id: '900301', status: 'present', skills: SK }], '9003', 'x'.repeat(100));
   assert.equal(ok.status, 200);
   const view = await api.request('GET', `/api/groups/9003/students?date=${h.WED}`, { tg: 3001 });
   assert.equal(view.json.submitted.payload.students[0].comment.length, 20);

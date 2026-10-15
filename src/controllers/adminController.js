@@ -8,6 +8,7 @@ const Submission = require('../models/submissionModel');
 const Audit = require('../models/auditModel');
 const config = require('../config/env');
 const testing = require('../config/testing');
+const personalTests = require('../config/personalTests');
 const { AppError } = require('../middleware/errorHandler');
 const { period } = require('../lib/date');
 
@@ -22,7 +23,7 @@ exports.today = async (req, res) => {
 exports.teacherStats = async (req, res) => res.json(await stats.teachers(period(req.query.from, req.query.to)));
 
 exports.config = (req, res) => res.json({
-  rules: config.rules, testing, timezone: config.timezone, auditRetentionDays: config.auditRetentionDays,
+  rules: config.rules, testing, personalTests: personalTests.categories, timezone: config.timezone, auditRetentionDays: config.auditRetentionDays,
   lowFillThreshold: config.lowFillThreshold, mock: config.hollihop.mock, directors: config.directorTelegramIds.length,
 });
 

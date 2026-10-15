@@ -14,15 +14,18 @@ const studentTestPct = (skills, typeId) => {
   return list.reduce((a, b) => a + b, 0) / list.length;
 };
 
+/** Статус ученика: «опоздал» из старых отметок → «был». */
+const statusOf = s => (s.status === 'absent' ? 'absent' : 'present');
+
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 1000) / 10 : null);
 
-/** Счётчики посещаемости по списку отметок. «Был» и «опоздал» считаются присутствием. */
+/** Счётчики посещаемости по списку отметок. Старые отметки «опоздал» считаются присутствием. */
 function attendanceOf(rows) {
-  const c = { present: 0, late: 0, absent: 0, excused: 0, tested: 0, pctSum: 0, passChecks: 0, passed: 0 };
+  const c = { present: 0, absent: 0, excused: 0, tested: 0, pctSum: 0, passChecks: 0, passed: 0 };
   for (const row of rows) {
     const payload = Submission.parse(row.payload);
     for (const s of payload.students) {
-      c[s.status] = (c[s.status] || 0) + 1;
+      c[statusOf(s)]++;
       if (s.status === 'absent' && s.excused) c.excused++;
       if (s.skills) {
         c.tested++; c.pctSum += studentTestPct(s.skills, payload.testTypeId);
@@ -30,10 +33,10 @@ function attendanceOf(rows) {
       }
     }
   }
-  const total = c.present + c.late + c.absent;
+  const total = c.present + c.absent;
   return {
-    students: total, present: c.present, late: c.late, absent: c.absent, excused: c.excused,
-    rate: pct(c.present + c.late, total),
+    students: total, present: c.present, absent: c.absent, excused: c.excused,
+    rate: pct(c.present, total),
     tests: c.tested,
     avgTest: c.tested ? Math.round((c.pctSum / c.tested) * 10) / 10 : null,
     testPassRate: pct(c.passed, c.passChecks),
@@ -137,8 +140,8 @@ exports.groupDetail = async (groupId, { from, to }) => {
   for (const row of own) {
     const payload = Submission.parse(row.payload);
     for (const s of payload.students) {
-      const x = perStudent.get(s.id) || { present: 0, late: 0, absent: 0, pctSum: 0, tested: 0 };
-      x[s.status]++;
+      const x = perStudent.get(s.id) || { present: 0, absent: 0, pctSum: 0, tested: 0 };
+      x[statusOf(s)]++;
       if (s.skills) { x.pctSum += studentTestPct(s.skills, payload.testTypeId); x.tested++; }
       perStudent.set(s.id, x);
     }
@@ -150,9 +153,9 @@ exports.groupDetail = async (groupId, { from, to }) => {
     topics: own.filter(r => Submission.parse(r.payload).topic).slice(0, 10)
       .map(r => ({ date: r.lesson_date, topic: Submission.parse(r.payload).topic })),
     students: roster.map(st => {
-      const x = perStudent.get(st.id) || { present: 0, late: 0, absent: 0, pctSum: 0, tested: 0 };
-      const total = x.present + x.late + x.absent;
-      return { ...st, lessons: total, absent: x.absent, rate: pct(x.present + x.late, total), avgTest: x.tested ? Math.round((x.pctSum / x.tested) * 10) / 10 : null };
+      const x = perStudent.get(st.id) || { present: 0, absent: 0, pctSum: 0, tested: 0 };
+      const total = x.present + x.absent;
+      return { ...st, lessons: total, absent: x.absent, rate: pct(x.present, total), avgTest: x.tested ? Math.round((x.pctSum / x.tested) * 10) / 10 : null };
     }),
   };
 };

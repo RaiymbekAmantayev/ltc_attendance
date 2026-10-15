@@ -24,14 +24,14 @@ const STUDENT_NAMES = ['Аян Сериков', 'Мира Ахметова', 'Т
 
 // Учебная единица 31 — тестовая (как в песочнице HollyHop): занятия каждый день.
 EDUNITS.push({ Id: 31, Name: 'TEST · Sandbox group', OfficeOrCompanyName: 'Абая', StudentsCount: 3, Vacancies: 5, Level: 'Test', Discipline: 'English', ScheduleItems: [item(127, '09:00', '10:00', 101)] });
-const SKILLS_BY_TYPE = { 131: { 8: 45, 11: 5, 17: 5 }, 132: { 8: 45, 13: 5, 18: 5 } };   // набор навыков и максимумы каждого типа теста
+const SKILLS_BY_TYPE = { 131: { 8: 45, 9: 5, 10: 5, 11: 5 }, 132: { 8: 45, 9: 5, 10: 5, 13: 5 } };   // набор навыков и максимумы каждого типа теста
 const TEST_TYPES = [131, 132];
 
-const state = { writes: [], tests: [], failures: [] };
+const state = { writes: [], tests: [], personal: [], failures: [] };
 
 /** Для тестов: следующий вызов метода завершится ошибкой {status, body}. */
 const failNext = (method, failure) => state.failures.push({ method, ...failure });
-const reset = () => { state.writes = []; state.tests = []; state.failures = []; };
+const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; };
 
 const ok = body => ({ status: 200, body });
 
@@ -68,6 +68,16 @@ async function respond(method, payload) {
       if (payload.skills.some(k => !(k.score >= 0) || k.score > SKILLS[k.skillId])) return { status: 400, body: { Error: 'Баллы превышают максимум' } };
       if (!payload.edUnitId || !payload.studentClientId || !payload.date) return { status: 400, body: { Error: 'Не заполнены обязательные поля' } };
       state.tests.push(payload);
+      return ok({ Success: true });
+    }
+    case 'AddEditPersonalTestResult': {
+      for (const field of ['studentClientId', 'dateTime', 'discipline', 'testTypeId']) {
+        if (!payload[field]) return { status: 400, body: { Error: 'Не заполнено поле ' + field } };
+      }
+      if (!Array.isArray(payload.skills) || !payload.skills.length || payload.skills.some(k => !k.skillId || !(k.score >= 0))) {
+        return { status: 400, body: { Error: 'Неверный набор навыков' } };
+      }
+      state.personal.push(payload);
       return ok({ Success: true });
     }
     default:

@@ -16,6 +16,7 @@ after(() => api.close());
 beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissions'); await h.db.query('DELETE FROM substitutions'); });
 
 const students = async group => (await api.request('GET', `/api/groups/${group}/students?date=${h.WED}`, { tg: TG.teacher })).json.students;
+const DAILY = { 13: 5, 9: 5, 10: 5 };                            // ежедневный тест обязателен для присутствовавших
 const body = (key, group, list, extra = {}) => ({ key, groupId: group, date: h.WED, topic: 'Past Simple', students: list, ...extra });
 
 test('initData: подделка, чужой токен, просрочка и незнакомый человек отклоняются', async () => {
@@ -39,20 +40,20 @@ test('преподаватель видит только свои группы �
 });
 
 test('сохранение пишет посещаемость в HollyHop; повтор того же нажатия не дублирует', async () => {
-  const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', excused: i === 0, skills: i === 1 ? { 13: '5', 18: '4' } : null, comment: i === 1 ? 'Хорошо <b>ответил</b>' : '' }));
+  const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', excused: i === 0, skills: i === 0 ? null : { 13: '5', 9: '4', 10: '4' }, comment: 'не используется' }));
   const key = h.uuid();
   const first = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
   assert.equal(first.json.status, 'done');
   assert.equal(h.mock.state.writes.length, list.length);
   const absent = h.mock.state.writes.find(w => w.Pass);
   assert.match(absent.Description, /уважительная/);
-  // тест: местный преподаватель → тип 132; навык 8 по умолчанию 45; комментарий экранирован в HTML
-  assert.equal(h.mock.state.tests.length, 1);
+  // тест: местный преподаватель → тип 132; навык 8 всегда 45; в комментарий уходит тема урока
+  assert.equal(h.mock.state.tests.length, list.length - 1);   // всем, кроме пропустившего
   const test = h.mock.state.tests[0];
   assert.equal(test.testTypeId, 132);
   assert.equal(test.edUnitId, 9001);
-  assert.deepEqual(test.skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 5 }, { skillId: 18, score: 4 }]);
-  assert.equal(test.commentHtml, 'Хорошо &lt;b&gt;ответил&lt;/b&gt;');
+  assert.deepEqual(test.skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 5 }, { skillId: 9, score: 4 }, { skillId: 10, score: 4 }]);
+  assert.equal(test.commentHtml, 'Past Simple');
 
   const again = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
   assert.equal(again.json.status, 'done');
@@ -62,7 +63,7 @@ test('сохранение пишет посещаемость в HollyHop; по
 });
 
 test('правка задним числом запрещена: другое нажатие на то же занятие → 409', async () => {
-  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present' }));
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) });
   const edit = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) });
   assert.equal(edit.status, 409);
@@ -71,19 +72,19 @@ test('правка задним числом запрещена: другое н
 });
 
 test('защита: чужая группа, ученик не из группы, плохие данные', async () => {
-  const list = [{ id: '900101', status: 'present' }];
+  const list = [{ id: '900101', status: 'present', skills: DAILY }];
   assert.equal((await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9002', list) })).status, 403);
   assert.equal((await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', [{ id: '777', status: 'present' }]) })).status, 400);
   assert.equal((await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body('bad-key', '9001', list) })).status, 400);
   assert.equal((await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list, { date: '2026-02-31' }) })).status, 400);
-  const nan = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', [{ id: '900101', status: 'present', skills: { 13: 'abc', 18: 3 } }]) });
+  const nan = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', [{ id: '900101', status: 'present', skills: { 13: 'abc', 9: 3, 10: 3 } }]) });
   assert.equal(nan.status, 422);
   assert.equal(nan.json.error, 'bad_score');
   assert.equal((await api.request('POST', '/api/lessons', { tg: TG.coord, body: body(h.uuid(), '9001', list) })).status, 403);   // у координатора нет своих групп
 });
 
 test('сбой HollyHop → «частично», досылка пишет только недостающее и без дублей', async () => {
-  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present' }));
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   for (let i = 0; i < 5; i++) h.mock.failNext('SetStudentPasses', { status: 500 });   // исчерпать повторы первого ученика
   const key = h.uuid();
   const res = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
@@ -103,7 +104,7 @@ test('сбой HollyHop → «частично», досылка пишет то
 });
 
 test('нет прав на запись → «нужно внимание», без бесконечных повторов; админ может повторить', async () => {
-  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present' }));
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   h.mock.failNext('SetStudentPasses', { status: 403, body: { Error: 'Нет прав доступа' } });
   const key = h.uuid();
   const res = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
@@ -123,7 +124,7 @@ test('замена на дату открывает группу заменяю�
   await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9002', lesson_date: h.WED, substitute_id: t1 } });
   const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
   assert.ok(lessons.find(g => g.id === '9002' && g.substitution));
-  const list = (await api.request('GET', `/api/groups/9002/students?date=${h.WED}`, { tg: TG.teacher })).json.students.map(s => ({ id: s.id, status: 'present' }));
+  const list = (await api.request('GET', `/api/groups/9002/students?date=${h.WED}`, { tg: TG.teacher })).json.students.map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   const saved = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9002', list) });
   assert.equal(saved.json.status, 'done');
   const [rows] = await h.db.query('SELECT teacher_id FROM submissions WHERE group_id="9002"');
@@ -132,7 +133,7 @@ test('замена на дату открывает группу заменяю�
 
 test('аудит-лог пишет автора, а профиль считает месяц', async () => {
   const today = require('../src/lib/date').todayIso();
-  const list = (await students('9001')).map(s => ({ id: s.id, status: 'late' }));
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'late', skills: DAILY }));
   // для профиля нужна отметка «сегодняшнего» месяца: записываем напрямую
   await h.db.query(`INSERT INTO submissions (idem_key, teacher_id, group_id, lesson_date, payload, progress, status)
     VALUES (?,?,?,?,?,?,?)`, [h.uuid(), t1, '9001', today, JSON.stringify({ topic: '', students: list }), '[]', 'done']);

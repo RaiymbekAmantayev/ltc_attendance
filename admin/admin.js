@@ -13,8 +13,13 @@
   };
   const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
   const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '' }, auditAction: '', q: '', roleFilter: '' };
-  const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 17: 'Discipline/Engagement' }, 132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 18: 'Дисциплина/Активность' } };
+  const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
+    132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
+  const PERSONAL_CATS = { 1: 'Progress Test', 4: 'Final Test', 6: 'Entry test', 5: 'Revise&Check' };
+  const PERSONAL_SKILLS = { 1: 'Listening', 2: 'Reading', 3: 'Grammar', 4: 'Vocabulary', 5: 'Pronunciation', 6: 'Speaking', 7: 'Writing', 21: 'Attendance' };
+  const personalLabel = p => (p.personal ? `${PERSONAL_CATS[p.personal.categoryId] || p.personal.categoryId} (тип ${p.personal.testTypeId})` : '');
+  const personalScores = s => (s.personalSkills ? Object.entries(s.personalSkills).map(([k, v]) => `${PERSONAL_SKILLS[k] || '№' + k}: ${v}`).join(' · ') : '—');
   const parse = v => (typeof v === 'string' ? JSON.parse(v) : v);
 
   async function api(path, { method = 'GET', body } = {}) {
@@ -85,7 +90,7 @@
         </div>
         <div class="card"><div class="card-title">Отметки по дням</div>${LTC.vbars(ov.byDay.slice(-31).map(d => ({ label: LTC.short(d.date), value: d.count })))}</div>
         <div class="card"><div class="card-title">Посещаемость</div>${LTC.hbars([
-          { label: 'Был', value: ov.attendance.present, sev: 'sev-ok' }, { label: 'Опоздал', value: ov.attendance.late, sev: 'sev-warn' }, { label: 'Пропуск', value: ov.attendance.absent, sev: 'sev-crit' }])}
+          { label: 'Был', value: ov.attendance.present, sev: 'sev-ok' }, { label: 'Пропуск', value: ov.attendance.absent, sev: 'sev-crit' }])}
           <p class="hint" style="margin-top:10px">Из пропусков уважительных: ${ov.attendance.excused}</p></div>
         <div class="card"><div class="card-title">Статусы записи</div>${LTC.hbars([
           { label: 'В HollyHop', value: s.done, sev: 'sev-ok' }, { label: 'Ждёт отправки', value: s.pending, sev: 'sev-warn' },
@@ -231,19 +236,20 @@
   on(root, 'change', '#m-status', el => { state.subm.status = el.value; show('subm'); });
   on(root, 'click', '[data-detail]', el => {
     const x = submissions[Number(el.dataset.detail)], p = parse(x.payload), pr = parse(x.progress) || [];
-    const label = { present: 'Был', late: 'Опоздал', absent: 'Пропуск' };
+    const label = { present: 'Был', late: 'Был', absent: 'Пропуск' };      // late — старые отметки
     LTC.modal.open(`${x.group_name || x.group_id} · ${x.lesson_date}`, `
       <div class="mrow"><span class="k">Автор</span><span class="v">${esc(x.full_name)}</span></div>
       <div class="mrow"><span class="k">Сохранено</span><span class="v">${esc(x.created_at)} UTC</span></div>
       <div class="mrow"><span class="k">Тема</span><span class="v">${esc(p.topic || '—')}</span></div>
+      <div class="mrow"><span class="k">Доп. тест</span><span class="v">${esc(personalLabel(p) || '—')}</span></div>
       <div class="mrow"><span class="k">Шагов записано</span><span class="v">${pr.length}</span></div>
       <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
       <div class="msec-title">Ученики (ID HollyHop)</div>
-      <div class="tscroll"><table><tr><th>ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th><th class="left">Комментарий</th></tr>
-      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}${s.status === 'absent' ? (s.excused ? ' (ув.)' : ' (неув.)') : ''}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td><td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+      <div class="tscroll"><table><tr><th>ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
+      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}${s.status === 'absent' ? (s.excused ? ' (ув.)' : ' (неув.)') : ''}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
   });
-  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Причина', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Discipline/Engagement, 17', 'Дисциплина/Активность, 18', 'Комментарий'],
-    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.status === 'absent' ? (s.excused ? 'уважительная' : 'неуважительная') : '', s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[17], s.skills?.[18], s.comment]); })));
+  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Причина', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.status === 'absent' ? (s.excused ? 'уважительная' : 'неуважительная') : '', s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
 
   /* ---------- Аудит ---------- */
   views.audit = async () => {
@@ -266,13 +272,14 @@
     main.innerHTML = `
       <div class="card"><div class="card-title">Правила ввода (разд. 5 ТЗ)</div>
         <dl class="kv">
-          <dt>Тест обязателен</dt><dd>${yes(c.rules.testRequired)} <span class="mut">TEST_REQUIRED</span></dd>
+          <dt>Ежедневный тест</dt><dd>обязателен для присутствовавших</dd>
           <dt>Типы теста HollyHop</dt><dd>Foreign (EN) → ${c.testing.testTypeIds.foreign} · Local (RU) → ${c.testing.testTypeIds.local}</dd>
-          <dt>Навыки и баллы</dt><dd>${Object.entries(c.testing.skillsByType).map(([type, list]) => `<b>${type}</b>: ${list.map(k => `${esc(k.name)} (№${k.id}): 0–${k.max}${k.default != null ? `, по умолч. ${k.default}` : ''}${k.pass != null ? `, порог ${k.pass}` : ''}`).join(' · ')}`).join('<br>')}</dd>
+          <dt>Навыки и баллы</dt><dd>${Object.entries(c.testing.skillsByType).map(([type, list]) => `<b>${type}</b>: ${list.map(k => `${esc(k.name)} (№${k.id ?? '— ID не указан'}): 0–${k.max}${k.default != null ? `, по умолч. ${k.default}` : ''}${k.pass != null ? `, порог ${k.pass}` : ''}`).join(' · ')}`).join('<br>')}</dd>
+          <dt>Доп. (персональный) тест</dt><dd>по желанию, не больше одного на урок · AddEditPersonalTestResult<br>${c.personalTests.map(cat => `<b>${esc(cat.name)}</b> (кат. ${cat.id}): ${cat.types.map(x => `${esc(x.name)} — тип ${x.id}: ${x.skills.map(k => `${esc(k.name)} (№${k.id}) 0–${k.max}`).join(', ')}`).join(' | ')}`).join('<br>')}</dd>
           <dt>Тест пишется для групп</dt><dd>${c.testing.edUnitIds.length ? esc(c.testing.edUnitIds.join(', ')) : 'для всех'} <span class="mut">HH_TEST_EDUNIT_IDS</span></dd>
-          <dt>Комментарий обязателен</dt><dd>${yes(c.rules.commentRequired)} <span class="mut">COMMENT_REQUIRED</span></dd>
+          <dt>Тема урока обязательна (= комментарий в HollyHop)</dt><dd>${yes(c.rules.commentRequired)} <span class="mut">COMMENT_REQUIRED</span></dd>
           <dt>Макс. длина комментария</dt><dd>${c.rules.commentMaxLen} <span class="mut">COMMENT_MAX_LEN</span></dd>
-        </dl><p class="note" style="margin-top:12px">Тест и комментарий требуются только от тех, кто был на уроке; тест считается заполненным, когда введены баллы навыков «Домашнее задание» и «Дисциплина» (навык 8 по умолчанию 45). Менять — в файле .env, затем перезапустить сервер.</p></div>
+        </dl><p class="note" style="margin-top:12px">Тесты и комментарий — только для тех, кто был на уроке. Ежедневный тест обязателен (навык 8 всегда 45); доп. тест — по выбору преподавателя, баллы вводятся тем ученикам, кто его писал. Менять — в файле .env, затем перезапустить сервер.</p></div>
       <div class="card"><div class="card-title">Система</div>
         <dl class="kv">
           <dt>Часовой пояс отдела</dt><dd>${esc(c.timezone)} <span class="mut">APP_TZ</span></dd>

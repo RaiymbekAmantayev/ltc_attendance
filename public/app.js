@@ -195,7 +195,46 @@
 
   /* ============ Экран 2: группа ============ */
 
-  const skillsOf = () => (state.me.testing && state.me.testing.skills) || [];
+  // Навыки с fixed (8 → всегда 45) в интерфейсе не показываем — их подставляет сервер.
+  const skillsOf = () => ((state.me.testing && state.me.testing.skills) || []).filter(k => !k.fixed);
+
+  /* Персональный тест урока (не больше одного): категория → тип теста HollyHop → навыки. */
+  const personalCats = () => state.me.personalTests || [];
+  const personalCat = id => personalCats().find(c => String(c.id) === String(id)) || null;
+  const personalType = (categoryId, typeId) => {
+    const c = personalCat(categoryId);
+    return (c && c.types.find(x => String(x.id) === String(typeId))) || null;
+  };
+  /** Текущий выбор на экране: {category, type} (type = null, пока тип не выбран) либо null. */
+  function personalChoice() {
+    const cat = personalCat($('#pcat')?.value);
+    if (!cat) return null;
+    return { category: cat, type: cat.types.length === 1 ? cat.types[0] : personalType(cat.id, $('#ptype').value) };
+  }
+
+  function personalBlock(saved) {
+    const t = T(), p = saved?.personal, cat = p ? personalCat(p.categoryId) : null;
+    const opt = (value, label, on) => `<option value="${esc(value)}" ${on ? 'selected' : ''}>${esc(label)}</option>`;
+    return `<div class="ptest"><div class="skills-title">${esc(t.personalTest)}</div>
+      <div class="row">
+        <select id="pcat" class="field grow">${opt('', t.personalNone, !cat)}${personalCats().map(c => opt(c.id, c.name, cat && c.id === cat.id)).join('')}</select>
+        <select id="ptype" class="field grow" ${cat && cat.types.length > 1 ? '' : 'hidden'}>${cat && cat.types.length > 1
+          ? opt('', t.personalPickType, false) + cat.types.map(x => opt(x.id, x.name, x.id === p.testTypeId)).join('') : ''}</select>
+      </div></div>`;
+  }
+
+  /** Поля навыков персонального теста в карточке ученика (при повторном выборе того же типа значения сохраняются). */
+  function paintPersonal(card, saved) {
+    const box = $('.pskills', card), choice = personalChoice(), type = choice && choice.type;
+    box.hidden = !type || card.dataset.status === 'absent';
+    if (!type) { box.innerHTML = ''; box.dataset.type = ''; return; }
+    if (box.dataset.type === `${choice.category.id}:${type.id}`) return;
+    box.dataset.type = `${choice.category.id}:${type.id}`;
+    const values = saved || {};
+    box.innerHTML = `<div class="skills-title">${esc(choice.category.name)}${choice.category.types.length > 1 ? ' · ' + esc(type.name) : ''}</div>
+      <div class="skills-grid">${type.skills.map(k => `<label class="sk"><span>${esc(k.name)}<em>0–${k.max}</em></span>
+        <input class="pskill" type="text" inputmode="decimal" autocomplete="off" data-skill="${k.id}" data-max="${k.max}" value="${esc(values[k.id] ?? '')}"></label>`).join('')}</div>`;
+  }
 
   /** Подсветка порога успешности: балл ≥ порога — зелёный, ниже — красный (подсказка, не запрет). */
   function paintSkill(input) {
@@ -211,7 +250,7 @@
     const excused = saved.excused === undefined ? '' : saved.excused ? '1' : '0';
     const seg = (value, cls) => `<button type="button" class="${cls} ${status === value ? 'on' : ''}" data-st="${value}" aria-pressed="${status === value}">${esc(t[value])}</button>`;
     const ex = (value, label) => `<button type="button" class="${excused === value ? 'on' : ''}" data-ex="${value}" aria-pressed="${excused === value}">${esc(label)}</button>`;
-    // Навык с значением по умолчанию (8 → 45) подставляется в новую отметку; в сохранённой показываем то, что записано.
+    // Навык с значением по умолчанию подставляется в новую отметку; в сохранённой показываем то, что записано.
     const skill = k => {
       const value = saved.status ? (saved.skills ? saved.skills[k.id] : '') : (k.default ?? '');
       const hint = k.pass != null ? ` · ${fmt(t.passHint, { n: k.pass })}` : '';
@@ -222,17 +261,17 @@
     return `
       <div class="scard" data-student="${esc(s.id)}" data-name="${esc(s.name)}" data-status="${status}" data-excused="${excused}">
         <div class="tcard-top"><div class="avatar">${esc(LTC.initial(s.name))}</div><div class="tcard-name grow">${esc(s.name)}</div></div>
-        <div class="seg3" role="group">${seg('present', 'p')}${seg('late', 'l')}${seg('absent', 'a')}</div>
+        <div class="seg3" role="group">${seg('present', 'p')}${seg('absent', 'a')}</div>
         <div class="seg2" ${status === 'absent' ? '' : 'hidden'}>${ex('1', t.excused)}${ex('0', t.unexcused)}</div>
         <div class="skills" ${status === 'absent' ? 'hidden' : ''}><div class="skills-title">${esc(t.test)}</div><div class="skills-grid">${skillsOf().map(skill).join('')}</div></div>
-        <div class="srow"><input class="comment" type="text" maxlength="${state.me.rules.commentMaxLen || 500}" autocomplete="off" placeholder="${esc(t.comment)}" value="${esc(saved.comment || '')}"></div>
+        <div class="pskills" hidden></div>
       </div>`;
   }
 
   function updateSummary() {
     const cards = $$('.scard'), count = s => cards.filter(c => c.dataset.status === s).length;
     const el = $('#summary');
-    if (el) el.textContent = fmt(T().summary, { p: count('present'), l: count('late'), a: count('absent') });
+    if (el) el.textContent = fmt(T().summary, { p: count('present'), a: count('absent') });
   }
 
   async function openGroup(groupId, groupName) {
@@ -244,7 +283,7 @@
     try {
       const { students, submitted } = await cached(`roster:${groupId}:${date}`, () => api(`/groups/${groupId}/students?date=${date}`));
       const queuedItem = queue.all().find(p => p.groupId === groupId && p.date === date);
-      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, students: queuedItem.students });
+      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, personal: queuedItem.personal, students: queuedItem.students });
       const readOnly = !!saved;
       const byId = id => saved?.students.find(s => s.id === id) || {};
       const status = queuedItem && !submitted ? 'pending' : submitted?.status;
@@ -258,10 +297,12 @@
             <div class="insight-body"><span class="chip ${STATUS_CHIP[status] || ''}">${esc(t.status[status] || '')}</span> ${note ? esc(note) : ''}</div></div></div>` : ''}
         <fieldset class="${readOnly ? 'lock' : ''}" ${readOnly ? 'disabled' : ''}>
           <input type="text" id="topic" class="field" placeholder="${esc(t.topic)}" maxlength="500" value="${esc(saved?.topic || '')}">
+          ${personalBlock(saved)}
           ${readOnly ? '' : `<div class="row" style="margin:10px 0"><button type="button" class="btn ghost sm" data-act="allpresent">✓ ${esc(t.allPresent)}</button><span class="mut grow" id="summary"></span></div>`}
           ${students.map(s => studentCard(s, byId(s.id), readOnly)).join('')}
         </fieldset>
         ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(t.save)}</button></div>`}`;
+      $$('.scard').forEach(card => paintPersonal(card, byId(card.dataset.student).personalSkills));
       updateSummary();
     } catch (e) { view.innerHTML = errorBox(e); }
   }
@@ -271,12 +312,16 @@
   /** Чтение формы + проверка правил ввода (разд. 5 ТЗ). Возвращает {students} либо {error, card}. */
   function collect() {
     const t = T(), rules = state.me.rules, config = skillsOf();
+    const topic = $('#topic').value.trim();                // тема урока = комментарий в HollyHop
+    if (rules.commentRequired && !topic) return { error: t.needTopic, card: $('#topic') };
+    const choice = personalChoice();
+    if (choice && !choice.type) return { error: t.needPersonalType, card: $('#ptype') };
+    const personal = choice && { categoryId: choice.category.id, testTypeId: choice.type.id };
     const students = [];
     for (const card of $$('.scard')) {
       const s = {
-        id: card.dataset.student, name: card.dataset.name, status: card.dataset.status, skills: null,
+        id: card.dataset.student, name: card.dataset.name, status: card.dataset.status, skills: null, personalSkills: null,
         excused: card.dataset.excused === '' ? null : card.dataset.excused === '1',
-        comment: $('.comment', card).value.trim(),
       };
       const fail = text => ({ error: text, card });
       if (s.status === 'absent' && s.excused === null) return fail(fmt(t.needReason, s));
@@ -296,12 +341,29 @@
             skills[k.id] = n;
           }
           s.skills = skills;
-        } else if (rules.testRequired) return fail(fmt(t.needTest, s));
-        if (rules.commentRequired && !s.comment) return fail(fmt(t.needComment, s));
+        } else return fail(fmt(t.needTest, s));                // ежедневный тест обязателен
+
+        // Персональный тест — по желанию для каждого ученика, но если начат, нужен полный набор навыков.
+        if (choice) {
+          const raw = $$('.pskill', card).map(i => i.value.trim().replace(',', '.'));
+          if (raw.some(v => v !== '')) {
+            const skills = {};
+            for (const [i, k] of choice.type.skills.entries()) {
+              if (raw[i] === '') return fail(fmt(t.needTestFull, { skill: choice.type.skills.map(x => x.name).join(', '), name: s.name }));
+              const n = Number(raw[i]);
+              if (!Number.isFinite(n)) return fail(fmt(t.badScore, s));
+              if (n < 0 || n > k.max) return fail(fmt(t.scoreRange, { skill: k.name, max: k.max, name: s.name }));
+              skills[k.id] = n;
+            }
+            s.personalSkills = skills;
+          }
+        }
       }
       students.push(s);
     }
-    return { students };
+    if (personal && !students.some(s => s.personalSkills)) return { error: fmt(t.needPersonalScores, { test: choice.category.name }), card: $('#pcat') };
+    const personalName = choice && [choice.category.name, choice.category.types.length > 1 ? choice.type.name : ''].filter(Boolean).join(' · ');
+    return { students, personal, personalName };
   }
 
   function confirmSave() {
@@ -313,7 +375,8 @@
     }
     const count = s => result.students.filter(x => x.status === s).length;
     const body = LTC.modal.open(t.confirmTitle, `
-      <p>${esc(fmt(t.summary, { p: count('present'), l: count('late'), a: count('absent') }))}</p>
+      <p>${esc(fmt(t.summary, { p: count('present'), a: count('absent') }))}</p>
+      ${result.personal ? `<p>${esc(t.personalTest)}: <b>${esc(result.personalName)}</b> · ${result.students.filter(x => x.personalSkills).length} ${esc(t.students)}</p>` : ''}
       <div class="callout">${esc(t.confirmText)}</div>
       <div class="row"><button class="btn ghost grow" data-modal-close>${esc(t.cancel)}</button><button class="btn grow" id="confirm">${esc(t.confirmYes)}</button></div>`);
     $('#confirm', body).onclick = async () => {
@@ -321,7 +384,7 @@
       LTC.modal.close();
       const g = state.group;
       queue.add({                                              // сначала в память телефона, затем отправка
-        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(),
+        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(), personal: result.personal,
         students: result.students.map(({ name, ...s }) => ({ ...s, excused: s.excused === true })),
       });
       await flush();
@@ -376,7 +439,7 @@
     else if (act === 'day') { state.date = LTC.addDays(state.date, Number(el.dataset.n)); go('lessons'); }
     else if (act === 'today') { state.date = LTC.localToday(); go('lessons'); }
     else if (act === 'allpresent') {
-      $$('.scard').forEach(c => { c.dataset.status = 'present'; $$('[data-st]', c).forEach(b => b.classList.toggle('on', b.dataset.st === 'present')); $('.seg2', c).hidden = true; $('.skills', c).hidden = false; });
+      $$('.scard').forEach(c => { c.dataset.status = 'present'; $$('[data-st]', c).forEach(b => b.classList.toggle('on', b.dataset.st === 'present')); $('.seg2', c).hidden = true; $('.skills', c).hidden = false; paintPersonal(c); });
       updateSummary();
     }
   });
@@ -388,8 +451,16 @@
     $$('[data-st]', card).forEach(b => { const on = b === el; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
     $('.seg2', card).hidden = el.dataset.st !== 'absent';
     $('.skills', card).hidden = el.dataset.st === 'absent';
+    paintPersonal(card);
     updateSummary();
   });
+  on(root, 'change', '#pcat', el => {
+    const cat = personalCat(el.value), type = $('#ptype');
+    type.hidden = !cat || cat.types.length < 2;
+    type.innerHTML = type.hidden ? '' : `<option value="">${esc(T().personalPickType)}</option>` + cat.types.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    $$('.scard').forEach(card => paintPersonal(card));
+  });
+  on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
   on(root, 'click', '[data-ex]', el => {
     const card = el.closest('.scard');
     card.dataset.excused = el.dataset.ex;

@@ -5,6 +5,7 @@ const { hollihop } = require('../config/env');
 const { weekdayBit } = require('../lib/date');
 const mock = require('./hollihopMock');
 const testing = require('../config/testing');
+const personalTests = require('../config/personalTests');
 
 const MAX_RETRIES = Number(process.env.HH_MAX_RETRIES ?? 4);
 const RETRY_BASE_MS = Number(process.env.HH_RETRY_BASE_MS ?? 700);
@@ -186,8 +187,7 @@ exports.teachers = async () => {
 // Поля payable и overwriteAcceptedManually не указываем: по документации неуказанный параметр
 // не меняется. Повторная запись той же даты перезаписывает — поэтому повтор безопасен (разд. 7.1 ТЗ).
 exports.writeAttendance = (groupId, date, s) => {
-  const note = s.status === 'late' ? 'Опоздал'
-    : s.status === 'absent' ? 'Пропуск: ' + (s.excused ? 'уважительная' : 'неуважительная')
+  const note = s.status === 'absent' ? 'Пропуск: ' + (s.excused ? 'уважительная' : 'неуважительная')
     : undefined;                                          // undefined = примечание не трогаем
 
   return call('SetStudentPasses', [{
@@ -206,7 +206,7 @@ exports.testEnabledFor = groupId => !testing.edUnitIds.length || testing.edUnitI
 
 /**
  * Результат теста ученика: AddEditEdUnitTestResult. Повторный вызов с той же датой и типом теста
- * редактирует результат, поэтому повтор безопасен (разд. 7.1 ТЗ). Комментарий уходит в commentHtml.
+ * редактирует результат, поэтому повтор безопасен (разд. 7.1 ТЗ). Комментарий (= тема урока) уходит в commentHtml.
  * Без баллов (s.skills пуст) в HollyHop ничего не пишем — комментарий остаётся у нас.
  */
 exports.writeReport = async (groupId, date, s, payload = {}) => {
@@ -217,6 +217,24 @@ exports.writeReport = async (groupId, date, s, payload = {}) => {
     date,
     testTypeId: payload.testTypeId,
     skills: testing.skillsFor(payload.testTypeId).map(k => ({ skillId: k.id, score: Number(s.skills[k.id]) })),
+    commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',
+  });
+};
+
+/**
+ * Персональный тест ученика: AddEditPersonalTestResult (без id — добавление). Набор навыков — весь набор выбранного типа теста.
+ * Комментарий (= тема урока) уходит в commentHtml. Шаг идёт в общей очереди: после успеха повторно не отправляется.
+ */
+exports.writePersonalTest = async (s, payload) => {
+  const found = payload.personal && personalTests.find(payload.personal.categoryId, payload.personal.testTypeId);
+  if (!s.personalSkills || !found) return { local: true };
+  return call('AddEditPersonalTestResult', {
+    studentClientId: Number(s.id),
+    dateTime: payload.personal.dateTime,
+    discipline: personalTests.discipline,
+    ...(payload.personal.teacherId ? { teacherId: payload.personal.teacherId } : {}),
+    testTypeId: found.type.id,
+    skills: found.type.skills.map(k => ({ skillId: k.id, score: Number(s.personalSkills[k.id]) })),
     commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',
   });
 };

@@ -29,7 +29,7 @@ module.exports = {
   admin: { user: env.ADMIN_USER || 'admin', pass: env.ADMIN_PASS || '' },
   directorTelegramIds: list('DIRECTOR_TG_IDS'),
   rules: {
-    testRequired: flag('TEST_REQUIRED', flag('GRADE_REQUIRED')),      // GRADE_REQUIRED — прежнее имя
+    testRequired: true,                                                // ежедневный тест обязателен всегда (TEST_REQUIRED больше не читается)
     commentRequired: flag('COMMENT_REQUIRED'),
     commentMaxLen: num('COMMENT_MAX_LEN', 500),
   },

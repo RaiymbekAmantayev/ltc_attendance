@@ -28,12 +28,12 @@ test('обзор и группы: структура данных', async () => 
   const today = require('../src/lib/date').todayIso();
   await h.db.query(`INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, branch, lesson_date, payload, progress, status)
     VALUES (?,?,?,?,?,?,?,?,?)`, [h.uuid(), t1, '9001', 'English Elementary A1', 'Абая', today,
-    JSON.stringify({ topic: 'x', students: [{ id: '900101', status: 'present', skills: { 8: 45, 13: 5, 18: 3 } }, { id: '900102', status: 'absent', excused: true }] }), '[]', 'partial']);
+    JSON.stringify({ topic: 'x', students: [{ id: '900101', status: 'present', skills: { 8: 45, 13: 5, 9: 3, 10: 3 } }, { id: '900102', status: 'absent', excused: true }] }), '[]', 'partial']);
   const ov = (await api.request('GET', '/api/dash/overview', { tg: TG.director })).json;
   assert.equal(ov.kpi.lessons, 1);
   assert.equal(ov.kpi.attendanceRate, 50);
-  assert.equal(ov.kpi.avgTest, 86.7);                      // (100% + 100% + 60%) / 3
-  assert.equal(ov.kpi.testPassRate, 50);                   // из навыков с порогом: 11 (5≥4) прошёл, 17 (3<4) нет
+  assert.equal(ov.kpi.avgTest, 80);                        // (100% + 100% + 60% + 60%) / 4
+  assert.equal(ov.kpi.testPassRate, 33.3);                 // из навыков с порогом: 13 (5≥4) прошёл, 9 и 10 (3<4) нет
   assert.equal(ov.statuses.partial, 1);
   assert.equal(ov.problems.length, 1);
   assert.ok(ov.byDay.length >= 1);

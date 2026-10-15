@@ -6,11 +6,13 @@ const Submission = require('../models/submissionModel');
 const { AppError } = require('../middleware/errorHandler');
 const { rules, lowFillThreshold } = require('../config/env');
 const testing = require('../config/testing');
+const personalTests = require('../config/personalTests');
 
 exports.me = (req, res) => res.json({
   name: req.teacher.full_name, lang: req.teacher.lang, role: req.teacher.role,
   canMark: !!req.teacher.id, rules, lowFillThreshold,
   testing: { typeId: submissions.testTypeFor(req.teacher), skills: testing.skillsFor(submissions.testTypeFor(req.teacher)) },
+  personalTests: personalTests.categories,
 });
 
 exports.listLessons = async (req, res) => {

@@ -5,6 +5,7 @@ const Audit = require('../models/auditModel');
 const { AppError } = require('../middleware/errorHandler');
 const { rules } = require('../config/env');
 const testing = require('../config/testing');
+const personalTests = require('../config/personalTests');
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ATTEMPTS = 8;                                  // после стольких неудач подряд — «нужно внимание»
@@ -14,10 +15,9 @@ exports.testTypeFor = teacher => (teacher.lang === 'en' ? testing.testTypeIds.fo
 
 /**
  * Баллы теста по навыкам. Пусто (навыки без значения по умолчанию не заполнены) = теста нет. Иначе нужен полный набор навыков (требование HollyHop):
- * навык 8 по умолчанию 45, баллы от 0 до максимума навыка.
+ * навык 8 всегда 45, баллы от 0 до максимума навыка. test — 'daily' или 'personal' (для текста ошибки).
  */
-function normalizeSkills(raw, studentId, typeId) {
-  const config = testing.skillsFor(typeId);
+function normalizeSkills(raw, studentId, config, test = 'daily') {
   const input = raw && typeof raw === 'object' ? raw : {};
   const filled = id => input[id] !== undefined && input[id] !== null && String(input[id]).trim() !== '';
   const needed = config.filter(k => k.default === undefined);       // навыки без значения по умолчанию
@@ -25,33 +25,44 @@ function normalizeSkills(raw, studentId, typeId) {
 
   const skills = {};
   for (const k of config) {
-    const value = filled(k.id) ? Number(String(input[k.id]).replace(',', '.')) : k.default;
-    if (value === undefined) throw new AppError(422, 'test_incomplete', { student: studentId, skill: k.id });
-    if (!Number.isFinite(value)) throw new AppError(422, 'bad_score', { student: studentId, skill: k.id });
-    if (value < 0 || value > k.max) throw new AppError(422, 'score_out_of_range', { student: studentId, skill: k.id, max: k.max });
+    const value = k.fixed ? k.default : filled(k.id) ? Number(String(input[k.id]).replace(',', '.')) : k.default;
+    if (value === undefined) throw new AppError(422, 'test_incomplete', { student: studentId, skill: k.id, test });
+    if (!Number.isFinite(value)) throw new AppError(422, 'bad_score', { student: studentId, skill: k.id, test });
+    if (value < 0 || value > k.max) throw new AppError(422, 'score_out_of_range', { student: studentId, skill: k.id, max: k.max, test });
     skills[k.id] = value;
   }
   return skills;
 }
 
 /** Проверка и приведение одной строки ученика. Бросает AppError(422) при нарушении правил ввода. */
-function normalizeStudent(s, roster, typeId) {
+function normalizeStudent(s, roster, typeId, topic, personal) {
   const id = String(s.id);
   if (!roster.has(id)) throw new AppError(400, 'unknown_student', { student: id });
-  const status = ['present', 'late', 'absent'].includes(s.status) ? s.status : 'present';
-  const comment = String(s.comment || '').trim().slice(0, rules.commentMaxLen);
+  const status = s.status === 'absent' ? 'absent' : 'present';            // «опоздал» больше нет
+  const comment = topic.slice(0, rules.commentMaxLen);                     // комментарий = тема урока (уходит в commentHtml)
 
-  // Тест и комментарий — только тем, кто был на уроке (разд. 5 ТЗ — правила задаёт Учебный отдел).
-  const skills = status === 'absent' ? null : normalizeSkills(s.skills, id, typeId);
-  if (status !== 'absent') {
-    if (rules.testRequired && !skills) throw new AppError(422, 'test_required', { student: id });
-    if (rules.commentRequired && !comment) throw new AppError(422, 'comment_required', { student: id });
-  }
-  return { id, status, excused: status === 'absent' && !!s.excused, skills, comment };
+  // Тесты и комментарий — только тем, кто был на уроке. Ежедневный тест обязателен, персональный — по желанию.
+  if (status === 'absent') return { id, status, excused: !!s.excused, skills: null, personalSkills: null, comment };
+  const skills = normalizeSkills(s.skills, id, testing.skillsFor(typeId));
+  if (!skills) throw new AppError(422, 'test_required', { student: id });
+  if (rules.commentRequired && !comment) throw new AppError(422, 'comment_required', { student: id });
+  const personalSkills = personal ? normalizeSkills(s.personalSkills, id, personal.type.skills, 'personal') : null;
+  return { id, status, excused: false, skills, personalSkills, comment };
 }
 
+/** Выбранный персональный тест урока (не больше одного) или null. Бросает 422, если категории/типа нет. */
+function pickPersonal(raw) {
+  if (raw == null || raw === '' || (typeof raw === 'object' && raw.categoryId == null)) return null;
+  const found = personalTests.find(raw.categoryId, raw.testTypeId);
+  if (!found) throw new AppError(422, 'bad_personal_test');
+  return found;
+}
+
+/** Время теста для HollyHop: дата урока + начало занятия по расписанию. */
+const testDateTime = (date, group) => `${date}T${(/^\d{1,2}:\d\d/.exec(group.time || '') || ['00:00'])[0].padStart(5, '0')}:00`;
+
 /** Принимает отметку: сохраняет у себя и отправляет в HollyHop. Повтор с тем же key безопасен (разд. 7.1 ТЗ). */
-exports.save = async (teacher, { key, groupId, date, topic, students }) => {
+exports.save = async (teacher, { key, groupId, date, topic, students, personal: personalRaw }) => {
   if (!teacher.id) throw new AppError(403, 'forbidden');
   if (!UUID.test(key || '') || !lessons.isDate(date) || !groupId || !Array.isArray(students) || !students.length || students.length > 300) {
     throw new AppError(400, 'bad_request');
@@ -61,11 +72,18 @@ exports.save = async (teacher, { key, groupId, date, topic, students }) => {
 
   const roster = new Set((await hollihop.students(groupId)).map(s => s.id));
   const unique = [...new Map(students.map(s => [String(s.id), s])).values()];
+  const cleanTopic = String(topic || '').trim().slice(0, 500);
+  const personal = pickPersonal(personalRaw);
   const payload = {
-    topic: String(topic || '').trim().slice(0, 500),
+    topic: cleanTopic,
     testTypeId: exports.testTypeFor(teacher),
-    students: unique.map(s => normalizeStudent(s, roster, exports.testTypeFor(teacher))),
+    personal: personal && {
+      categoryId: personal.category.id, testTypeId: personal.type.id,
+      dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
+    },
+    students: unique.map(s => normalizeStudent(s, roster, exports.testTypeFor(teacher), cleanTopic, personal)),
   };
+  if (personal && !payload.students.some(s => s.personalSkills)) throw new AppError(422, 'personal_empty');
 
   try {
     await Submission.create({ key, teacherId: teacher.id, groupId, groupName: group.name, branch: group.branch, date, payload });
@@ -100,6 +118,7 @@ exports.push = async key => {
     for (const s of payload.students) {
       steps.push([`a:${s.id}`, () => hollihop.writeAttendance(groupId, date, s)]);
       if (s.skills && hollihop.testEnabledFor(groupId)) steps.push([`r:${s.id}`, () => hollihop.writeReport(groupId, date, s, payload)]);
+      if (s.personalSkills && payload.personal && hollihop.testEnabledFor(groupId)) steps.push([`p:${s.id}`, () => hollihop.writePersonalTest(s, payload)]);
     }
 
     let status = 'done', lastError = null, fatal = false;
