@@ -36,6 +36,6 @@ ls -lt /opt/ltc-cabinet-node/releases      # релизы; откат: ln -sfn <
 ```
 
 ## Домен
-Когда A-запись поддомена будет указывать на сервер — добавить блок из `Caddyfile.snippet` в Caddyfile,
-затем в `.env`: `APP_URL=https://<поддомен>`, `BOT_DISABLED=0`. Бот должен быть **своим**:
+Поддомен `attendance.ltsastana.kz` (A → 45.93.136.191). Блок из `Caddyfile.snippet`
+добавлен в Caddyfile; в `.env`: `APP_URL=https://attendance.ltsastana.kz`. Бот (`BOT_DISABLED=0`) — только **свой**:
 тот же токен, что у работающего бота, вызовет конфликт `getUpdates`.
