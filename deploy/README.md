@@ -25,7 +25,6 @@ Caddy, `/opt/ltc-teacher-cabinet`, `@LTC_Teacher_bot` и остальные се
    в `/opt/ltc-cabinet-node/shared/.env`.
 3. GitHub → Settings → Environments → `production`:
    - секрет `DEPLOY_SSH_KEY` — содержимое `ci_deploy` (приватный ключ), затем удалить файл;
-   - секрет `DEPLOY_KNOWN_HOSTS` — вывод `ssh-keyscan -t ed25519 45.93.136.191`;
    - переменная `DEPLOY_HOST` = `45.93.136.191`.
 4. Actions → CI / Deploy → Run workflow.
 

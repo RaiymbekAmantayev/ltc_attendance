@@ -50,7 +50,8 @@ jobs:
         run: |
           install -d -m 700 ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
-          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          # Публичный ключ сервера (не секрет), отпечаток SHA256:7DTT5czwgo1kWBjjQt9151GntdzLj6tGxald/vLRkOI
+          echo "${{ vars.DEPLOY_HOST }} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN6a0sVGX9bUCBLul/fyh/tKBqdhyir33n9gW+/sn9B" > ~/.ssh/known_hosts
 
       - name: Деплой
         env:
