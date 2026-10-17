@@ -49,4 +49,5 @@ fi
 
 # Чистим старые релизы, текущий не трогаем.
 CUR=$(readlink -f $BASE/current)
-ls -1dt $BASE/releases/*/ | sed 's#/$##' | grep -vxF "$CUR" | tail -n +$KEEP | xargs -r rm -rf
+ls -1dt $BASE/releases/*/ | sed 's#/$##' | { grep -vxF "$CUR" || true; } | tail -n +$KEEP | xargs -r rm -rf
+echo "==> релизов на сервере: $(ls -1d $BASE/releases/*/ | wc -l)"
