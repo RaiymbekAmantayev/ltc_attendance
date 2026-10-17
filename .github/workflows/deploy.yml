@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.4
@@ -22,8 +22,8 @@ jobs:
           --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=5s --health-timeout=3s --health-retries=20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -34,15 +34,14 @@ jobs:
 
   deploy:
     needs: test
-    # Деплой включается переменной DEPLOY_HOST (Settings → Environments → production).
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && vars.DEPLOY_HOST != ''
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
     environment: production
     concurrency:
       group: deploy-production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Собрать релиз
         run: git archive --format=tar.gz -o release.tar.gz HEAD

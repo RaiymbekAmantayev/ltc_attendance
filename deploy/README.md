@@ -17,7 +17,7 @@ Caddy, `/opt/ltc-teacher-cabinet`, `@LTC_Teacher_bot` и остальные се
 `.github/workflows/deploy.yml`: на каждый push/PR — тесты на MySQL; на push в `master` после зелёных тестов —
 архив коммита по SSH на сервер → `deploy/remote-deploy.sh`: новый релиз, `npm ci`, миграции (`init-db`),
 переключение `current`, рестарт, проверка `/healthz`; если не ответил — откат на предыдущий релиз.
-Деплой включён, только когда в окружении `production` задана переменная `DEPLOY_HOST`.
+Адрес сервера — переменная `DEPLOY_HOST` окружения `production`.
 
 ## Первичная настройка (один раз)
 1. Ключ для CI (на своём компьютере): `ssh-keygen -t ed25519 -N "" -C github-actions-ltc -f ci_deploy`
