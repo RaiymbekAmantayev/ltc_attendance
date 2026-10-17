@@ -15,6 +15,7 @@ if (missing.length) {
 
 module.exports = {
   port: num('PORT', 3000),
+  host: env.HOST || undefined,                                         // на сервере 127.0.0.1 — наружу только через Caddy
   botToken: env.BOT_TOKEN,
   appUrl: env.APP_URL || '',
   telegramApiBase: (env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\/$/, ''),

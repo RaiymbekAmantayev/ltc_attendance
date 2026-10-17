@@ -1,10 +1,10 @@
-const { port, hollihop } = require('./config/env');
+const { port, host, hollihop } = require('./config/env');
 const app = require('./app');
 const { pool } = require('./config/db');
 const { startBot } = require('./bot/bot');
 const { startRetryWorker } = require('./jobs/retryWorker');
 
-const server = app.listen(port, () => console.log(`LTC cabinet on :${port}${hollihop.mock ? ' (HH_MOCK: демо-режим HollyHop)' : ''}`));
+const server = app.listen(port, host, () => console.log(`LTC cabinet on ${host || ''}:${port}${hollihop.mock ? ' (HH_MOCK: демо-режим HollyHop)' : ''}`));
 if (process.env.BOT_DISABLED === '1') console.log('bot: отключён (BOT_DISABLED=1)');
 else startBot().catch(error => console.error('bot:', error));
 const worker = startRetryWorker();

@@ -1,0 +1,62 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: mysql://root:@127.0.0.1:3306/ltc_test
+
+  deploy:
+    needs: test
+    # Деплой включается переменной DEPLOY_HOST (Settings → Environments → production).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать релиз
+        run: git archive --format=tar.gz -o release.tar.gz HEAD
+
+      - name: SSH-ключ
+        run: |
+          install -d -m 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Деплой
+        env:
+          TARGET: ltccab@${{ vars.DEPLOY_HOST }}
+        run: |
+          SSH="ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          scp -i ~/.ssh/deploy -o IdentitiesOnly=yes release.tar.gz deploy/remote-deploy.sh "$TARGET:/tmp/"
+          $SSH "$TARGET" "bash /tmp/remote-deploy.sh ${{ github.sha }} /tmp/release.tar.gz; rc=\$?; rm -f /tmp/remote-deploy.sh; exit \$rc"

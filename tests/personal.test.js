@@ -45,10 +45,10 @@ test('Progress Test пишется тем, кому введены баллы; �
 test('Entry test и Revise&Check: нужен тип; навыки — по типу', async () => {
   assert.equal((await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: 20 } }], { categoryId: 6 })).json.error, 'bad_personal_test');
   assert.equal((await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: 20 } }], { categoryId: 6, testTypeId: 999 })).json.error, 'bad_personal_test');
-  const entry = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: '24,5' } }], { categoryId: 6, testTypeId: 126 });
+  const entry = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: '24,5' } }], { categoryId: 6, testTypeId: 112 });
   assert.equal(entry.json.status, 'done', JSON.stringify(entry.json));
   assert.deepEqual(h.mock.state.personal[0].skills, [{ skillId: 3, score: 20 }, { skillId: 4, score: 24.5 }]);
-  assert.equal(h.mock.state.personal[0].testTypeId, 126);
+  assert.equal(h.mock.state.personal[0].testTypeId, 112);
 
   await h.db.query('DELETE FROM submissions');
   const rc = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 1: 4, 2: 9, 3: 20, 4: 30 } }], { categoryId: 5, testTypeId: 6 });

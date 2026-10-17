@@ -1,0 +1,9 @@
+# --- ltc-cabinet-node (Node.js кабинет, деплой из GitHub Actions) — НЕ УДАЛЯТЬ ---
+# Добавить в конец /home/ductor-ops/caddy/Caddyfile отдельным блоком, когда A-запись поддомена
+# будет указывать на 45.93.136.191. Блок ltc.main.yelumio.kz не трогаем.
+# Проверка и применение:
+#   /home/ductor-ops/.local/bin/caddy validate --config /home/ductor-ops/caddy/Caddyfile --adapter caddyfile
+#   systemctl reload ltc-caddy
+cabinet.example.kz {
+	reverse_proxy 127.0.0.1:9120
+}
