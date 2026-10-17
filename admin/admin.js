@@ -3,16 +3,18 @@
   const { $, $$, on, esc } = LTC;
   const main = $('#main'), root = document.getElementById('app');
 
-  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['audit', 'Аудит'], ['rules', 'Правила']];
+  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['ktp', 'КТП'], ['audit', 'Аудит'], ['rules', 'Правила']];
   const STATUS = { done: ['good', '✅ В HollyHop'], pending: ['warn', '⏳ Ждёт отправки'], partial: ['warn', '⚠️ Частично'], attention: ['bad', '⚠️ Нужно внимание'] };
   const ROLE = { teacher: 'Преподаватель', coordinator: 'Координатор', director: 'Директор' };
   const ACTION = {
     save: 'Отметка сохранена', synced: 'Записано в HollyHop', retry: 'Повтор отправки', attention: 'Нужно внимание',
     teacher_create: 'Сотрудник добавлен', teacher_update: 'Сотрудник изменён', teacher_import: 'Импорт из HollyHop',
     substitution_add: 'Замена назначена', substitution_remove: 'Замена снята',
+    ktp_category_add: 'КТП: категория добавлена', ktp_category_rename: 'КТП: категория переименована', ktp_category_remove: 'КТП: категория удалена',
+    ktp_topic_add: 'КТП: тема добавлена', ktp_topic_update: 'КТП: тема изменена', ktp_topic_remove: 'КТП: тема удалена', ktp_import: 'КТП: вставка из Excel',
   };
   const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
-  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '' }, auditAction: '', q: '', roleFilter: '' };
+  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
@@ -90,8 +92,7 @@
         </div>
         <div class="card"><div class="card-title">Отметки по дням</div>${LTC.vbars(ov.byDay.slice(-31).map(d => ({ label: LTC.short(d.date), value: d.count })))}</div>
         <div class="card"><div class="card-title">Посещаемость</div>${LTC.hbars([
-          { label: 'Был', value: ov.attendance.present, sev: 'sev-ok' }, { label: 'Пропуск', value: ov.attendance.absent, sev: 'sev-crit' }])}
-          <p class="hint" style="margin-top:10px">Из пропусков уважительных: ${ov.attendance.excused}</p></div>
+          { label: 'Был', value: ov.attendance.present, sev: 'sev-ok' }, { label: 'Пропуск', value: ov.attendance.absent, sev: 'sev-crit' }])}</div>
         <div class="card"><div class="card-title">Статусы записи</div>${LTC.hbars([
           { label: 'В HollyHop', value: s.done, sev: 'sev-ok' }, { label: 'Ждёт отправки', value: s.pending, sev: 'sev-warn' },
           { label: 'Частично', value: s.partial, sev: 'sev-warn' }, { label: 'Нужно внимание', value: s.attention, sev: 'sev-crit' }])}</div>
@@ -246,10 +247,99 @@
       <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
       <div class="msec-title">Ученики (ID HollyHop)</div>
       <div class="tscroll"><table><tr><th>ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
-      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}${s.status === 'absent' ? (s.excused ? ' (ув.)' : ' (неув.)') : ''}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
   });
-  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Причина', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
-    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.status === 'absent' ? (s.excused ? 'уважительная' : 'неуважительная') : '', s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
+  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
+
+  /* ---------- КТП: категории и темы по уровням ---------- */
+  // Колонки в порядке таблицы КТП — в этом же порядке вставляются строки из Excel.
+  const KTP_COLS = [['num', '№'], ['week', 'Неделя'], ['day', 'День'], ['lesson', 'Урок'], ['teacher', 'Препод'], ['section', 'Секция'], ['sb_page', 'Стр.SB'],
+    ['title', 'Тема / раздел книги'], ['role', 'Роль'], ['grammar', 'Грам./фокус'], ['vocabulary', 'Лексика'], ['homework', 'Домашнее задание (из книги)'], ['test_control', 'Тест/контроль']];
+  let ktpCats = [], ktpLevels = [], ktpTopics = [];
+  const ktpOptions = (list, value) => list.map(([v, label]) => `<option value="${esc(v)}" ${String(v) === String(value) ? 'selected' : ''}>${esc(label)}</option>`).join('');
+
+  views.ktp = async () => {
+    [ktpCats, ktpLevels] = await Promise.all([api('/ktp/categories'), api('/ktp/levels')]);
+    const f = state.ktp;
+    if (!ktpCats.some(c => String(c.id) === String(f.category))) f.category = ktpCats[0] ? String(ktpCats[0].id) : '';
+    if (!ktpLevels.includes(f.level)) f.level = ktpLevels[0];
+    ktpTopics = f.category ? await api(`/ktp/topics?category=${f.category}&level=${encodeURIComponent(f.level)}`) : [];
+    main.innerHTML = `
+      <div class="card"><div class="card-title">Категории</div>
+        <div class="tscroll"><table><tr><th class="left">Категория</th><th>Тем</th><th></th></tr>
+          ${ktpCats.map(c => `<tr><td class="left tcell-name">${esc(c.name)} <span class="mut">#${c.id}</span></td><td>${c.topics}</td>
+            <td class="act"><button class="btn ghost sm" data-ktp-rename="${c.id}">Переименовать</button> <button class="btn ghost sm" data-ktp-rmcat="${c.id}">Удалить</button></td></tr>`).join('')}</table></div>
+        <div class="toolbar" style="margin-top:12px"><input id="k-newcat" class="grow" maxlength="100" placeholder="Новая категория"><button class="btn" data-act="ktp-addcat">+ Добавить</button></div>
+      </div>
+      <div class="card"><div class="card-title">Темы</div>
+        <div class="toolbar">
+          <select id="k-cat">${ktpOptions(ktpCats.map(c => [c.id, c.name]), f.category)}</select>
+          <select id="k-level">${ktpOptions(ktpLevels.map(l => [l, l]), f.level)}</select>
+          <span class="mut">${ktpTopics.length} тем</span>
+          <button class="btn" data-act="ktp-add" style="margin-left:auto" ${f.category ? '' : 'disabled'}>+ Тема</button>
+          <button class="btn ghost" data-act="ktp-paste" ${f.category ? '' : 'disabled'}>Вставить из Excel</button>
+        </div>
+        <p class="note">Преподаватель видит темы уровня своей группы (уровень из HollyHop: «Inter + (plus)» = Intermediate Plus). Выбранная тема подставляется в «Тему урока».</p>
+        ${ktpTopics.length ? `<div class="tscroll"><table><tr>${KTP_COLS.map(([, label]) => `<th class="left">${esc(label)}</th>`).join('')}<th></th></tr>
+          ${ktpTopics.map(x => `<tr>${KTP_COLS.map(([k]) => `<td class="left">${esc(x[k] ?? '')}</td>`).join('')}
+            <td class="act"><button class="btn ghost sm" data-ktp-edit="${x.id}">Изменить</button> <button class="btn ghost sm" data-ktp-rm="${x.id}">✕</button></td></tr>`).join('')}</table></div>`
+          : '<div class="empty">Тем для этой категории и уровня пока нет</div>'}
+      </div>`;
+  };
+  on(root, 'change', '#k-cat', el => { state.ktp.category = el.value; show('ktp'); });
+  on(root, 'change', '#k-level', el => { state.ktp.level = el.value; show('ktp'); });
+
+  const ktpCall = async (path, opts, message) => {
+    try { const r = await api(path, opts); LTC.modal.close(); if (message) LTC.toast(typeof message === 'function' ? message(r) : message, 'good'); show('ktp'); }
+    catch (e) { LTC.toast(e.message, 'bad'); }
+  };
+  on(root, 'click', '[data-act="ktp-addcat"]', () => ktpCall('/ktp/categories', { method: 'POST', body: { name: $('#k-newcat').value } }, 'Категория добавлена'));
+  on(root, 'click', '[data-ktp-rename]', el => {
+    const c = ktpCats.find(x => String(x.id) === el.dataset.ktpRename);
+    LTC.modal.open('Переименовать категорию', `<div class="form-grid"><label class="full">Название<input id="k-catname" maxlength="100" value="${esc(c.name)}"></label></div>
+      <div class="row" style="margin-top:14px"><button class="btn grow" data-act="ktp-savecat" data-id="${c.id}">Сохранить</button><button class="btn ghost" data-modal-close>Отмена</button></div>`);
+  });
+  on(document.body, 'click', '[data-act="ktp-savecat"]', el => ktpCall('/ktp/categories', { method: 'POST', body: { id: Number(el.dataset.id), name: $('#k-catname').value } }, 'Сохранено'));
+  on(root, 'click', '[data-ktp-rmcat]', el => {
+    const c = ktpCats.find(x => String(x.id) === el.dataset.ktpRmcat);
+    if (confirm(`Удалить категорию «${c.name}»?`)) ktpCall('/ktp/categories/' + c.id, { method: 'DELETE' }, 'Категория удалена');
+  });
+
+  const topicForm = x => `
+    <div class="form-grid">
+      <label>Категория<select id="kf-cat">${ktpOptions(ktpCats.map(c => [c.id, c.name]), x.category_id ?? state.ktp.category)}</select></label>
+      <label>Уровень<select id="kf-level">${ktpOptions(ktpLevels.map(l => [l, l]), x.level ?? state.ktp.level)}</select></label>
+      ${KTP_COLS.map(([k, label]) => `<label class="${['title', 'homework'].includes(k) ? 'full' : ''}">${esc(label)}${k === 'title' ? ' *' : ''}
+        <input data-kf="${k}" ${k === 'num' ? 'inputmode="numeric"' : ''} value="${esc(x[k] ?? '')}"></label>`).join('')}
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn grow" data-act="ktp-save" data-id="${x.id || 0}">Сохранить</button><button class="btn ghost" data-modal-close>Отмена</button></div>`;
+  on(root, 'click', '[data-act="ktp-add"]', () => LTC.modal.open('Новая тема', topicForm({})));
+  on(root, 'click', '[data-ktp-edit]', el => LTC.modal.open('Тема КТП', topicForm(ktpTopics.find(x => String(x.id) === el.dataset.ktpEdit))));
+  on(document.body, 'click', '[data-act="ktp-save"]', el => {
+    const body = { id: Number(el.dataset.id) || undefined, category_id: Number($('#kf-cat').value), level: $('#kf-level').value };
+    $$('[data-kf]').forEach(input => { body[input.dataset.kf] = input.value; });
+    ktpCall('/ktp/topics', { method: 'POST', body }, 'Сохранено');
+  });
+  on(root, 'click', '[data-ktp-rm]', el => { if (confirm('Удалить тему?')) ktpCall('/ktp/topics/' + el.dataset.ktpRm, { method: 'DELETE' }); });
+
+  // Вставка из Excel: строки через перенос, ячейки через Tab; строка заголовка (начинается с «№») пропускается.
+  const pasteRows = text => text.split(/\r?\n/).filter(line => line.trim()).map(line => line.split('\t'))
+    .filter(cells => !/^\s*№/.test(cells[0]));
+  on(root, 'click', '[data-act="ktp-paste"]', () => {
+    const cat = ktpCats.find(c => String(c.id) === state.ktp.category);
+    LTC.modal.open(`Вставить из Excel · ${cat.name} · ${state.ktp.level}`, `
+      <p class="hint">Скопируйте строки таблицы КТП в Excel/Google Таблицах и вставьте сюда. Порядок колонок:<br><b>${KTP_COLS.map(([, l]) => esc(l)).join(' · ')}</b></p>
+      <textarea id="k-paste" rows="10" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="k-replace"> заменить все темы этой категории и уровня</label>
+      <div class="row" style="margin-top:14px"><button class="btn grow" data-act="ktp-import">Загрузить</button><button class="btn ghost" data-modal-close>Отмена</button></div>`);
+  });
+  on(document.body, 'click', '[data-act="ktp-import"]', () => {
+    const replace = $('#k-replace').checked;
+    if (replace && !confirm('Текущие темы этой категории и уровня будут удалены. Продолжить?')) return;
+    ktpCall('/ktp/topics/import', { method: 'POST', body: { category_id: Number(state.ktp.category), level: state.ktp.level, replace, rows: pasteRows($('#k-paste').value) } },
+      r => `Добавлено тем: ${r.added}`);
+  });
 
   /* ---------- Аудит ---------- */
   views.audit = async () => {

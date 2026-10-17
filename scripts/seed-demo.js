@@ -34,7 +34,7 @@ const pick = (list, i) => list[i % list.length];
       if ((back + gi) % 4 === 0) continue;                               // часть занятий не отмечена
       const students = Array.from({ length: count }, (_, i) => {
         const r = (back * 7 + gi * 3 + i * 5) % 11;
-        return { id: String(Number(id) * 100 + i + 1), status: r === 0 ? 'absent' : r === 1 ? 'late' : 'present', excused: r === 0 && i % 2 === 0, skills: r > 1 ? { 8: 45 - (r % 4) * 3, 11: 3 + (r % 3), 17: 2 + (r % 4) } : null, comment: '' };
+        return { id: String(Number(id) * 100 + i + 1), status: r === 0 ? 'absent' : r === 1 ? 'late' : 'present', skills: r > 1 ? { 8: 45 - (r % 4) * 3, 11: 3 + (r % 3), 17: 2 + (r % 4) } : null, comment: '' };
       });
       const status = (back + gi) % 9 === 0 ? 'partial' : (back + gi) % 13 === 0 ? 'attention' : 'done';
       const late = (back + gi) % 5 === 0;                                // часть отметок — на следующий день

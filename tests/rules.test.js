@@ -17,7 +17,7 @@ const SK = { 13: 4, 9: 5, 10: 5 };
 test('правила из разд. 5 ТЗ: тест и комментарий (= тема урока) обязательны только для присутствовавших', async () => {
   assert.equal((await save([{ id: '900101', status: 'present', comment: 'ok' }])).json.error, 'test_required');
   assert.equal((await save([{ id: '900101', status: 'present', skills: SK }])).json.error, 'comment_required');
-  const absent = await save([{ id: '900101', status: 'absent', excused: false }]);
+  const absent = await save([{ id: '900101', status: 'absent' }]);
   assert.equal(absent.status, 200);                                                // пропустившему тест не нужен
 });
 

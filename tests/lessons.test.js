@@ -40,13 +40,13 @@ test('преподаватель видит только свои группы �
 });
 
 test('сохранение пишет посещаемость в HollyHop; повтор того же нажатия не дублирует', async () => {
-  const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', excused: i === 0, skills: i === 0 ? null : { 13: '5', 9: '4', 10: '4' }, comment: 'не используется' }));
+  const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', skills: i === 0 ? null : { 13: '5', 9: '4', 10: '4' }, comment: 'не используется' }));
   const key = h.uuid();
   const first = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
   assert.equal(first.json.status, 'done');
   assert.equal(h.mock.state.writes.length, list.length);
   const absent = h.mock.state.writes.find(w => w.Pass);
-  assert.match(absent.Description, /уважительная/);
+  assert.equal(absent.Description, undefined);           // причины пропуска больше нет
   // тест: местный преподаватель → тип 132; навык 8 всегда 45; в комментарий уходит тема урока
   assert.equal(h.mock.state.tests.length, list.length - 1);   // всем, кроме пропустившего
   const test = h.mock.state.tests[0];

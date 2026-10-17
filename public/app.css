@@ -1,12 +1,10 @@
-/* Экран группы: карточки учеников, переключатели «Был / Опоздал / Пропуск», панель сохранения. */
+/* Экран группы: карточки учеников, переключатель «Был / Пропуск», панель сохранения. */
 .scard{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:12px 13px;margin-bottom:10px;box-shadow:var(--shadow)}
 .scard .tcard-name.grow{flex:1;font-size:14px}
 .seg3{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}
-.seg3 button,.seg2 button{border:1px solid var(--border);background:var(--surface);color:var(--hint);border-radius:11px;padding:10px 4px;font-weight:700;font-size:12.5px;transition:all .15s}
+.seg3 button{border:1px solid var(--border);background:var(--surface);color:var(--hint);border-radius:11px;padding:10px 4px;font-weight:700;font-size:12.5px;transition:all .15s}
 .seg3 button.on.p{background:color-mix(in srgb,var(--success) 20%,var(--card));border-color:var(--success);color:var(--success)}
 .seg3 button.on.a{background:color-mix(in srgb,var(--danger) 20%,var(--card));border-color:var(--danger);color:var(--danger)}
-.seg2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
-.seg2 button.on{background:var(--grad);border-color:transparent;color:#fff}
 .skills,.pskills{margin-top:10px}
 .ptest{margin-top:10px}.ptest .row{gap:8px}.ptest select{min-width:0}
 .skills-title{font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:6px}
@@ -18,9 +16,10 @@
 .sk input.bad{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,var(--surface))}
 .srow{margin-top:8px}.srow input{padding:9px 10px}
 fieldset{border:0;padding:0;margin:0;min-width:0}
-fieldset.lock .seg3 button,fieldset.lock .seg2 button{pointer-events:none}
+fieldset.lock .seg3 button{pointer-events:none}
 fieldset.lock .seg3 button:not(.on){opacity:.35}
-fieldset.lock .seg2 button:not(.on){opacity:.35}
 fieldset[disabled] input{opacity:.85}
 .savebar{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom,0px));padding-top:8px;background:linear-gradient(0deg,var(--bg) 70%,transparent);z-index:5}
-
+#ktp{margin-bottom:8px}
+.ktp-info{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 10px;margin-bottom:8px;font-size:12px}
+.ktp-info[hidden]{display:none}

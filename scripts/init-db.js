@@ -33,6 +33,14 @@ const COLUMNS = [
   // hollihop_id теперь может быть пустым (директор/координатор)
   await connection.query('ALTER TABLE teachers MODIFY hollihop_id VARCHAR(64) NULL');
 
+  // Категории КТП по умолчанию — только в пустую таблицу (переименования и удаления админа не трогаем).
+  const [[{ n }]] = await connection.query('SELECT COUNT(*) n FROM ktp_categories');
+  if (!Number(n)) {
+    await connection.query('INSERT INTO ktp_categories (id, name, sort) VALUES ?',
+      [[[1, 'Nef (Взрослые 15+)', 1], [2, 'Solutions (Дети)', 2], [3, 'Go better', 3]]]);
+    console.log('КТП: добавлены категории по умолчанию');
+  }
+
   console.log('Готово: база и таблицы созданы —', dbName);
   await connection.end();
 })().catch(error => { console.error(error.message); process.exit(1); });

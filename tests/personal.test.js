@@ -29,7 +29,7 @@ test('Progress Test пишется тем, кому введены баллы; �
   const res = await save([
     { id: '3101', status: 'present', skills: DAILY, personalSkills: PROGRESS },
     { id: '3102', status: 'present', skills: DAILY },
-    { id: '3103', status: 'absent', excused: true, personalSkills: PROGRESS },
+    { id: '3103', status: 'absent', personalSkills: PROGRESS },
   ], { categoryId: 1, testTypeId: 1 }, 'Unit 3 & 4');
   assert.equal(res.json.status, 'done', JSON.stringify(res.json));
   assert.equal(h.mock.state.tests.length, 2);

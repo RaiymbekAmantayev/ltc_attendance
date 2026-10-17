@@ -27,7 +27,7 @@ test('тестовая группа 31: тип 132 для местного, на
   assert.equal(noTest.json.error, 'test_required', 'ежедневный тест обязателен');
   assert.equal(noTest.json.student, '3102');
 
-  const res = await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 4, 9: 5, 10: 5 } }, { id: '3102', status: 'absent', excused: false }, { id: '3103', status: 'late', skills: { 8: 40, 13: '3,5', 9: 2, 10: 2 } }]);
+  const res = await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 4, 9: 5, 10: 5 } }, { id: '3102', status: 'absent' }, { id: '3103', status: 'late', skills: { 8: 40, 13: '3,5', 9: 2, 10: 2 } }]);
   assert.equal(res.json.status, 'done', JSON.stringify(res.json));
   assert.equal(h.mock.state.writes.length, 3, 'посещаемость — всем');
   assert.equal(h.mock.state.tests.length, 2, 'тест — только присутствовавшим');
@@ -59,7 +59,7 @@ test('валидация баллов: неполный набор, выше м�
 });
 
 test('пропустившему тест не записывается, даже если баллы пришли', async () => {
-  const res = await save(TG.ru, '31', [{ id: '3101', status: 'absent', excused: true, skills: { 13: 5, 9: 5, 10: 5 } }]);
+  const res = await save(TG.ru, '31', [{ id: '3101', status: 'absent', skills: { 13: 5, 9: 5, 10: 5 } }]);
   assert.equal(res.json.status, 'done');
   assert.equal(h.mock.state.tests.length, 0);
 });

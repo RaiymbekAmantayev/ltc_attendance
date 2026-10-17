@@ -18,12 +18,12 @@ module.exports = {
     { id: 4, name: 'Final Test', types: [
       { id: 1, name: 'Final Test', skills: FULL }] },               // testTypeId 1 — как у Progress Test (по данным Учебного отдела)
     { id: 6, name: 'Entry test', types: [
-      { id: 124, name: 'Elementary', skills: ENTRY },
-      { id: 125, name: 'Pre-Intermediate', skills: ENTRY },
-      { id: 126, name: 'Intermediate', skills: ENTRY },
-      { id: 127, name: 'Intermediate+', skills: ENTRY },
-      { id: 128, name: 'Upper-Intermediate', skills: ENTRY },
-      { id: 129, name: 'Advanced', skills: ENTRY }] },
+      { id: 111, name: 'Elementary', skills: ENTRY },
+      { id: 13, name: 'Pre-Intermediate', skills: ENTRY },
+      { id: 112, name: 'Intermediate', skills: ENTRY },
+      { id: 113, name: 'Intermediate+', skills: ENTRY },
+      { id: 114, name: 'Upper-Intermediate', skills: ENTRY },
+      { id: 115, name: 'Advanced', skills: ENTRY }] },
     { id: 5, name: 'Revise&Check', types: [
       { id: 5, name: 'Повторение по пройденным двум главам', skills: [k(1, 'Listening', 5), k(2, 'Reading', 6), k(3, 'Grammar', 15),
         k(4, 'Vocabulary', 25), k(5, 'Pronunciation', 5), k(6, 'Speaking', 6)] },

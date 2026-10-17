@@ -28,6 +28,22 @@ CREATE TABLE IF NOT EXISTS submissions(
   UNIQUE(group_id,lesson_date),                   -- одно занятие = один комплект; правка запрещена
   INDEX(lesson_date), INDEX(teacher_id, lesson_date), INDEX(status)
 );
+CREATE TABLE IF NOT EXISTS ktp_categories(       -- КТП: учебные линейки (Nef, Solutions, Go better…)
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  sort INT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS ktp_topics(           -- КТП: строки плана; уровень — из src/config/levels.js
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  category_id INT NOT NULL, level VARCHAR(32) NOT NULL,
+  num INT NULL, week VARCHAR(32) NULL, day VARCHAR(32) NULL, lesson VARCHAR(32) NULL,
+  teacher VARCHAR(100) NULL, section VARCHAR(255) NULL, sb_page VARCHAR(50) NULL,
+  title VARCHAR(500) NOT NULL,                     -- «Тема / раздел книги» — уходит темой урока
+  role VARCHAR(255) NULL, grammar VARCHAR(500) NULL, vocabulary VARCHAR(500) NULL,
+  homework VARCHAR(1000) NULL, test_control VARCHAR(500) NULL,
+  INDEX(category_id, level, num),
+  FOREIGN KEY(category_id) REFERENCES ktp_categories(id)
+);
 CREATE TABLE IF NOT EXISTS audit_log(
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   teacher_id INT, actor VARCHAR(100) NULL,

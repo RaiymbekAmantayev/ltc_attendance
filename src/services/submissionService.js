@@ -6,6 +6,7 @@ const { AppError } = require('../middleware/errorHandler');
 const { rules } = require('../config/env');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
+const Ktp = require('../models/ktpModel');
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ATTEMPTS = 8;                                  // после стольких неудач подряд — «нужно внимание»
@@ -42,12 +43,12 @@ function normalizeStudent(s, roster, typeId, topic, personal) {
   const comment = topic.slice(0, rules.commentMaxLen);                     // комментарий = тема урока (уходит в commentHtml)
 
   // Тесты и комментарий — только тем, кто был на уроке. Ежедневный тест обязателен, персональный — по желанию.
-  if (status === 'absent') return { id, status, excused: !!s.excused, skills: null, personalSkills: null, comment };
+  if (status === 'absent') return { id, status, skills: null, personalSkills: null, comment };
   const skills = normalizeSkills(s.skills, id, testing.skillsFor(typeId));
   if (!skills) throw new AppError(422, 'test_required', { student: id });
   if (rules.commentRequired && !comment) throw new AppError(422, 'comment_required', { student: id });
   const personalSkills = personal ? normalizeSkills(s.personalSkills, id, personal.type.skills, 'personal') : null;
-  return { id, status, excused: false, skills, personalSkills, comment };
+  return { id, status, skills, personalSkills, comment };
 }
 
 /** Выбранный персональный тест урока (не больше одного) или null. Бросает 422, если категории/типа нет. */
@@ -62,7 +63,7 @@ function pickPersonal(raw) {
 const testDateTime = (date, group) => `${date}T${(/^\d{1,2}:\d\d/.exec(group.time || '') || ['00:00'])[0].padStart(5, '0')}:00`;
 
 /** Принимает отметку: сохраняет у себя и отправляет в HollyHop. Повтор с тем же key безопасен (разд. 7.1 ТЗ). */
-exports.save = async (teacher, { key, groupId, date, topic, students, personal: personalRaw }) => {
+exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students, personal: personalRaw }) => {
   if (!teacher.id) throw new AppError(403, 'forbidden');
   if (!UUID.test(key || '') || !lessons.isDate(date) || !groupId || !Array.isArray(students) || !students.length || students.length > 300) {
     throw new AppError(400, 'bad_request');
@@ -74,8 +75,11 @@ exports.save = async (teacher, { key, groupId, date, topic, students, personal: 
   const unique = [...new Map(students.map(s => [String(s.id), s])).values()];
   const cleanTopic = String(topic || '').trim().slice(0, 500);
   const personal = pickPersonal(personalRaw);
+  // Тема из КТП — для отчётов; если её успели удалить, отметку не блокируем (могла ждать в очереди телефона).
+  const ktpTopic = Number(ktpTopicId) > 0 ? await Ktp.topicById(Number(ktpTopicId)) : null;
   const payload = {
     topic: cleanTopic,
+    ktpTopicId: ktpTopic ? ktpTopic.id : null,
     testTypeId: exports.testTypeFor(teacher),
     personal: personal && {
       categoryId: personal.category.id, testTypeId: personal.type.id,

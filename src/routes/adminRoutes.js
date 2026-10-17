@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const adminAuth = require('../middleware/adminAuth');
 const c = require('../controllers/adminController');
+const ktp = require('../controllers/ktpController');
 
 const router = express.Router();
 const API = '/admin-api';
@@ -27,5 +28,14 @@ router.delete(API + '/substitutions/:id', c.removeSubstitution);
 router.get(API + '/submissions', c.listSubmissions);
 router.post(API + '/submissions/:key/retry', c.retrySubmission);
 router.get(API + '/audit', c.listAudit);
+
+router.get(API + '/ktp/levels', ktp.levels);
+router.get(API + '/ktp/categories', ktp.listCategories);
+router.post(API + '/ktp/categories', ktp.saveCategory);
+router.delete(API + '/ktp/categories/:id', ktp.removeCategory);
+router.get(API + '/ktp/topics', ktp.listTopics);
+router.post(API + '/ktp/topics', ktp.saveTopic);
+router.post(API + '/ktp/topics/import', ktp.importTopics);
+router.delete(API + '/ktp/topics/:id', ktp.removeTopic);
 
 module.exports = router;

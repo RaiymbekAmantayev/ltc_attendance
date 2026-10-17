@@ -21,12 +21,11 @@ const pct = (part, whole) => (whole ? Math.round((part / whole) * 1000) / 10 : n
 
 /** Счётчики посещаемости по списку отметок. Старые отметки «опоздал» считаются присутствием. */
 function attendanceOf(rows) {
-  const c = { present: 0, absent: 0, excused: 0, tested: 0, pctSum: 0, passChecks: 0, passed: 0 };
+  const c = { present: 0, absent: 0, tested: 0, pctSum: 0, passChecks: 0, passed: 0 };
   for (const row of rows) {
     const payload = Submission.parse(row.payload);
     for (const s of payload.students) {
       c[statusOf(s)]++;
-      if (s.status === 'absent' && s.excused) c.excused++;
       if (s.skills) {
         c.tested++; c.pctSum += studentTestPct(s.skills, payload.testTypeId);
         for (const k of testing.skillsFor(payload.testTypeId)) if (k.pass != null) { c.passChecks++; if (Number(s.skills[k.id]) >= k.pass) c.passed++; }
@@ -35,7 +34,7 @@ function attendanceOf(rows) {
   }
   const total = c.present + c.absent;
   return {
-    students: total, present: c.present, absent: c.absent, excused: c.excused,
+    students: total, present: c.present, absent: c.absent,
     rate: pct(c.present, total),
     tests: c.tested,
     avgTest: c.tested ? Math.round((c.pctSum / c.tested) * 10) / 10 : null,

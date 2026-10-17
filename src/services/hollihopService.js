@@ -186,18 +186,13 @@ exports.teachers = async () => {
 // Посещаемость: SetStudentPasses принимает МАССИВ записей (у дня поля Date, Pass, Description).
 // Поля payable и overwriteAcceptedManually не указываем: по документации неуказанный параметр
 // не меняется. Повторная запись той же даты перезаписывает — поэтому повтор безопасен (разд. 7.1 ТЗ).
-exports.writeAttendance = (groupId, date, s) => {
-  const note = s.status === 'absent' ? 'Пропуск: ' + (s.excused ? 'уважительная' : 'неуважительная')
-    : undefined;                                          // undefined = примечание не трогаем
-
-  return call('SetStudentPasses', [{
+exports.writeAttendance = (groupId, date, s) =>
+  call('SetStudentPasses', [{
     Date: date,
     EdUnitId: Number(groupId),
     StudentClientId: Number(s.id),
     Pass: s.status === 'absent',
-    Description: note,
   }]);
-};
 
 const escapeHtml = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 

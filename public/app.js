@@ -244,12 +244,35 @@
     input.classList.add(Number(input.value.replace(',', '.')) >= Number(pass) ? 'ok' : 'bad');
   }
 
+  /* Тема из КТП: темы уровня группы по категориям; выбор подставляет тему урока (её можно дописать). */
+  const ktpTopic = id => (state.ktp?.categories || []).flatMap(c => c.topics).find(x => String(x.id) === String(id)) || null;
+  const ktpLabel = x => [x.num != null ? `${x.num}.` : '', x.week ? fmt(T().ktpWeek, { n: x.week }) : '', x.lesson ? fmt(T().ktpLesson, { n: x.lesson }) : '', x.title]
+    .filter(Boolean).join(' ');
+
+  function ktpBlock(saved) {
+    const t = T(), ktp = state.ktp;
+    if (!ktp?.categories.length) return '';
+    const selected = String(saved?.ktpTopicId ?? '');
+    return `<select id="ktp" class="field"><option value="">${esc(fmt(t.ktpPick, { level: ktp.level }))}</option>
+      ${ktp.categories.map(c => `<optgroup label="${esc(c.name)}">${c.topics.map(x =>
+        `<option value="${x.id}" ${String(x.id) === selected ? 'selected' : ''}>${esc(ktpLabel(x))}</option>`).join('')}</optgroup>`).join('')}
+      </select><div id="ktp-info" class="ktp-info"></div>`;
+  }
+
+  /** Подсказка по выбранной теме: страница SB, грамматика, лексика, ДЗ, контроль. */
+  function paintKtpInfo() {
+    const box = $('#ktp-info'); if (!box) return;
+    const t = T(), x = ktpTopic($('#ktp').value);
+    const rows = x ? [[t.ktpSection, x.section], [t.ktpPage, x.sb_page], [t.ktpGrammar, x.grammar], [t.ktpVocabulary, x.vocabulary],
+      [t.ktpHomework, x.homework], [t.ktpTest, x.test_control]].filter(([, v]) => v) : [];
+    box.hidden = !rows.length;
+    box.innerHTML = rows.map(([k, v]) => `<div class="mrow"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('');
+  }
+
   function studentCard(s, saved, readOnly) {
     const t = T();
     const status = saved.status || 'present';
-    const excused = saved.excused === undefined ? '' : saved.excused ? '1' : '0';
     const seg = (value, cls) => `<button type="button" class="${cls} ${status === value ? 'on' : ''}" data-st="${value}" aria-pressed="${status === value}">${esc(t[value])}</button>`;
-    const ex = (value, label) => `<button type="button" class="${excused === value ? 'on' : ''}" data-ex="${value}" aria-pressed="${excused === value}">${esc(label)}</button>`;
     // Навык с значением по умолчанию подставляется в новую отметку; в сохранённой показываем то, что записано.
     const skill = k => {
       const value = saved.status ? (saved.skills ? saved.skills[k.id] : '') : (k.default ?? '');
@@ -259,19 +282,12 @@
           data-skill="${k.id}" data-max="${k.max}" data-pass="${k.pass ?? ''}" data-default="${k.default ?? ''}" value="${esc(value ?? '')}"></label>`;
     };
     return `
-      <div class="scard" data-student="${esc(s.id)}" data-name="${esc(s.name)}" data-status="${status}" data-excused="${excused}">
+      <div class="scard" data-student="${esc(s.id)}" data-name="${esc(s.name)}" data-status="${status}">
         <div class="tcard-top"><div class="avatar">${esc(LTC.initial(s.name))}</div><div class="tcard-name grow">${esc(s.name)}</div></div>
         <div class="seg3" role="group">${seg('present', 'p')}${seg('absent', 'a')}</div>
-        <div class="seg2" ${status === 'absent' ? '' : 'hidden'}>${ex('1', t.excused)}${ex('0', t.unexcused)}</div>
         <div class="skills" ${status === 'absent' ? 'hidden' : ''}><div class="skills-title">${esc(t.test)}</div><div class="skills-grid">${skillsOf().map(skill).join('')}</div></div>
         <div class="pskills" hidden></div>
       </div>`;
-  }
-
-  function updateSummary() {
-    const cards = $$('.scard'), count = s => cards.filter(c => c.dataset.status === s).length;
-    const el = $('#summary');
-    if (el) el.textContent = fmt(T().summary, { p: count('present'), a: count('absent') });
   }
 
   async function openGroup(groupId, groupName) {
@@ -281,9 +297,10 @@
     window.scrollTo(0, 0);
     view.innerHTML = LTC.loader;
     try {
-      const { students, submitted } = await cached(`roster:${groupId}:${date}`, () => api(`/groups/${groupId}/students?date=${date}`));
+      const { students, submitted, ktp } = await cached(`roster:${groupId}:${date}`, () => api(`/groups/${groupId}/students?date=${date}`));
       const queuedItem = queue.all().find(p => p.groupId === groupId && p.date === date);
-      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, personal: queuedItem.personal, students: queuedItem.students });
+      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, ktpTopicId: queuedItem.ktpTopicId, personal: queuedItem.personal, students: queuedItem.students });
+      state.ktp = ktp || null;
       const readOnly = !!saved;
       const byId = id => saved?.students.find(s => s.id === id) || {};
       const status = queuedItem && !submitted ? 'pending' : submitted?.status;
@@ -296,14 +313,14 @@
             <div class="insight-title">🔒 ${esc(t.readOnly)}</div>
             <div class="insight-body"><span class="chip ${STATUS_CHIP[status] || ''}">${esc(t.status[status] || '')}</span> ${note ? esc(note) : ''}</div></div></div>` : ''}
         <fieldset class="${readOnly ? 'lock' : ''}" ${readOnly ? 'disabled' : ''}>
+          ${ktpBlock(saved)}
           <input type="text" id="topic" class="field" placeholder="${esc(t.topic)}" maxlength="500" value="${esc(saved?.topic || '')}">
           ${personalBlock(saved)}
-          ${readOnly ? '' : `<div class="row" style="margin:10px 0"><button type="button" class="btn ghost sm" data-act="allpresent">✓ ${esc(t.allPresent)}</button><span class="mut grow" id="summary"></span></div>`}
           ${students.map(s => studentCard(s, byId(s.id), readOnly)).join('')}
         </fieldset>
         ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(t.save)}</button></div>`}`;
       $$('.scard').forEach(card => paintPersonal(card, byId(card.dataset.student).personalSkills));
-      updateSummary();
+      paintKtpInfo();
     } catch (e) { view.innerHTML = errorBox(e); }
   }
 
@@ -319,13 +336,8 @@
     const personal = choice && { categoryId: choice.category.id, testTypeId: choice.type.id };
     const students = [];
     for (const card of $$('.scard')) {
-      const s = {
-        id: card.dataset.student, name: card.dataset.name, status: card.dataset.status, skills: null, personalSkills: null,
-        excused: card.dataset.excused === '' ? null : card.dataset.excused === '1',
-      };
+      const s = { id: card.dataset.student, name: card.dataset.name, status: card.dataset.status, skills: null, personalSkills: null };
       const fail = text => ({ error: text, card });
-      if (s.status === 'absent' && s.excused === null) return fail(fmt(t.needReason, s));
-
       if (s.status !== 'absent') {
         const values = Object.fromEntries($$('.skill', card).map(i => [i.dataset.skill, i.value.trim().replace(',', '.')]));
         // Тест есть, если заполнены навыки без значения по умолчанию; тогда нужен полный набор (требование HollyHop).
@@ -373,9 +385,7 @@
       result.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    const count = s => result.students.filter(x => x.status === s).length;
     const body = LTC.modal.open(t.confirmTitle, `
-      <p>${esc(fmt(t.summary, { p: count('present'), a: count('absent') }))}</p>
       ${result.personal ? `<p>${esc(t.personalTest)}: <b>${esc(result.personalName)}</b> · ${result.students.filter(x => x.personalSkills).length} ${esc(t.students)}</p>` : ''}
       <div class="callout">${esc(t.confirmText)}</div>
       <div class="row"><button class="btn ghost grow" data-modal-close>${esc(t.cancel)}</button><button class="btn grow" id="confirm">${esc(t.confirmYes)}</button></div>`);
@@ -384,8 +394,8 @@
       LTC.modal.close();
       const g = state.group;
       queue.add({                                              // сначала в память телефона, затем отправка
-        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(), personal: result.personal,
-        students: result.students.map(({ name, ...s }) => ({ ...s, excused: s.excused === true })),
+        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(), ktpTopicId: Number($('#ktp')?.value) || null, personal: result.personal,
+        students: result.students.map(({ name, ...s }) => s),
       });
       await flush();
       const left = queue.has(g.id, state.date);
@@ -438,10 +448,6 @@
     else if (act === 'reload') go(state.tab);
     else if (act === 'day') { state.date = LTC.addDays(state.date, Number(el.dataset.n)); go('lessons'); }
     else if (act === 'today') { state.date = LTC.localToday(); go('lessons'); }
-    else if (act === 'allpresent') {
-      $$('.scard').forEach(c => { c.dataset.status = 'present'; $$('[data-st]', c).forEach(b => b.classList.toggle('on', b.dataset.st === 'present')); $('.seg2', c).hidden = true; $('.skills', c).hidden = false; paintPersonal(c); });
-      updateSummary();
-    }
   });
   on(root, 'change', '#date', el => { if (/^\d{4}-\d\d-\d\d$/.test(el.value)) { state.date = el.value; go('lessons'); } });
   on(root, 'click', '.tcard[data-group]', el => openGroup(el.dataset.group, el.dataset.name));
@@ -449,10 +455,8 @@
     const card = el.closest('.scard');
     card.dataset.status = el.dataset.st;
     $$('[data-st]', card).forEach(b => { const on = b === el; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
-    $('.seg2', card).hidden = el.dataset.st !== 'absent';
     $('.skills', card).hidden = el.dataset.st === 'absent';
     paintPersonal(card);
-    updateSummary();
   });
   on(root, 'change', '#pcat', el => {
     const cat = personalCat(el.value), type = $('#ptype');
@@ -460,12 +464,12 @@
     type.innerHTML = type.hidden ? '' : `<option value="">${esc(T().personalPickType)}</option>` + cat.types.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
     $$('.scard').forEach(card => paintPersonal(card));
   });
-  on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
-  on(root, 'click', '[data-ex]', el => {
-    const card = el.closest('.scard');
-    card.dataset.excused = el.dataset.ex;
-    $$('[data-ex]', card).forEach(b => { const on = b === el; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+  on(root, 'change', '#ktp', el => {
+    const x = ktpTopic(el.value);
+    if (x) $('#topic').value = x.title.slice(0, 500);
+    paintKtpInfo();
   });
+  on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
   on(root, 'click', '#save', confirmSave);
   on(root, 'input', '.skill', paintSkill);
 

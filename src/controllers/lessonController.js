@@ -3,6 +3,8 @@ const lessons = require('../services/lessonService');
 const submissions = require('../services/submissionService');
 const stats = require('../services/statsService');
 const Submission = require('../models/submissionModel');
+const Ktp = require('../models/ktpModel');
+const levels = require('../config/levels');
 const { AppError } = require('../middleware/errorHandler');
 const { rules, lowFillThreshold } = require('../config/env');
 const testing = require('../config/testing');
@@ -22,12 +24,15 @@ exports.listLessons = async (req, res) => {
 
 exports.groupStudents = async (req, res) => {
   const { id } = req.params, { date } = req.query;
-  if (!lessons.isDate(date) || !(await lessons.canAccessGroup(req.teacher, id, date))) throw new AppError(403, 'forbidden');
+  const group = lessons.isDate(date) && await lessons.groupForTeacher(req.teacher, id, date);
+  if (!group) throw new AppError(403, 'forbidden');
 
   const saved = await Submission.findByGroupAndDate(id, date);
+  const level = levels.normalize(group.level);              // «Inter + (plus)» → Intermediate Plus
   res.json({
     students: await hollihop.students(id),
     submitted: saved ? { status: saved.status, payload: Submission.parse(saved.payload) } : null,
+    ktp: { level, categories: await Ktp.forLevel(level) },  // темы КТП уровня группы по категориям
   });
 };
 
