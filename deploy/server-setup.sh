@@ -44,14 +44,20 @@ if ! docker ps -a --format '{{.Names}}' | grep -qx "$DB_CONTAINER"; then
     --memory 1g \
     mysql:8.4 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 fi
+# mysqladmin ping «успешен» и на временном сервере первичной инициализации (где пароля root ещё нет),
+# поэтому ждём настоящего запроса с паролем.
 echo -n "ждём MySQL"
-for i in $(seq 1 60); do
-  docker exec $DB_CONTAINER mysqladmin ping -uroot -p"$(cat $DB_ROOT_FILE)" --silent &>/dev/null && break
+for i in $(seq 1 90); do
+  docker exec $DB_CONTAINER mysql -uroot -p"$(cat $DB_ROOT_FILE)" -e 'SELECT 1' &>/dev/null && break
+  [ "$i" = 90 ] && { echo; echo "MySQL не поднялась за 3 минуты: docker logs $DB_CONTAINER"; exit 1; }
   echo -n .; sleep 2
 done; echo
 
 # 4. Пользователь БД и shared/.env (создаётся один раз; дальше правится руками).
 ENV_FILE=$BASE/shared/.env
+if [ -f $ENV_FILE ] && ! grep -q '^DATABASE_URL=' $ENV_FILE; then
+  mv $ENV_FILE $ENV_FILE.incomplete-$(date +%s)   # пустой/неполный файл (например, созданный nano) — пересоздаём
+fi
 if [ ! -f $ENV_FILE ]; then
   DB_PASS=$(openssl rand -hex 20)
   docker exec -i $DB_CONTAINER mysql -uroot -p"$(cat $DB_ROOT_FILE)" <<SQL
