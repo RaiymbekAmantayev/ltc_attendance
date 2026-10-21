@@ -22,7 +22,7 @@ const save = (list, personal, topic = 'Unit 3') => api.request('POST', '/api/les
 test('/me отдаёт 4 категории доп. теста', async () => {
   const me = (await api.request('GET', '/api/me', { tg: TG })).json;
   assert.deepEqual(me.personalTests.map(c => [c.id, c.name, c.types.length]),
-    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3]]);
+    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3], [45, 'File Test NEF', 12]]);
 });
 
 test('Progress Test пишется тем, кому введены баллы; остальным — только ежедневный', async () => {

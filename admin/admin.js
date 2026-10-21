@@ -18,8 +18,8 @@
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
-  const PERSONAL_CATS = { 1: 'Progress Test', 4: 'Final Test', 6: 'Entry test', 5: 'Revise&Check' };
-  const PERSONAL_SKILLS = { 1: 'Listening', 2: 'Reading', 3: 'Grammar', 4: 'Vocabulary', 5: 'Pronunciation', 6: 'Speaking', 7: 'Writing', 21: 'Attendance' };
+  const PERSONAL_CATS = { 1: 'Progress Test', 4: 'Final Test', 6: 'Entry test', 5: 'Revise&Check', 45: 'File Test NEF' };
+  const PERSONAL_SKILLS = { 1: 'Listening', 2: 'Reading', 3: 'Grammar', 4: 'Vocabulary', 5: 'Pronunciation', 6: 'Speaking', 7: 'Writing', 16: 'Practical English', 21: 'Attendance' };
   const personalLabel = p => (p.personal ? `${PERSONAL_CATS[p.personal.categoryId] || p.personal.categoryId} (тип ${p.personal.testTypeId})` : '');
   const personalScores = s => (s.personalSkills ? Object.entries(s.personalSkills).map(([k, v]) => `${PERSONAL_SKILLS[k] || '№' + k}: ${v}`).join(' · ') : '—');
   const parse = v => (typeof v === 'string' ? JSON.parse(v) : v);

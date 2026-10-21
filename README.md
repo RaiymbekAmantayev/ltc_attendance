@@ -51,7 +51,7 @@ npm start
 | Тип теста | `131` — иностранный преподаватель (lang=en), `132` — местный |
 | Навыки 131 (Foreign) | 8 Was present for (min) — всегда 45, в интерфейсе скрыт · 11 Homework · 9 Engagement · 10 Discipline — макс. 5, порог 4 |
 | Навыки 132 (Local) | 8 Was present for (min) — всегда 45, в интерфейсе скрыт · 13 Домашнее задание · 9 Активность · 10 Дисциплина — макс. 5, порог 4 |
-| Доп. тест | `AddEditPersonalTestResult`, не больше одного на урок, по желанию: Progress Test, Final Test, Entry test (тип 124–129), Revise&Check (тип 5–7). Конфигурация — `src/config/personalTests.js` |
+| Доп. тест | `AddEditPersonalTestResult`, не больше одного на урок, по желанию: Progress Test, Final Test, Entry test (тип 124–129), Revise&Check (тип 5–7), File Test NEF (кат. 45, File 1–12 — тип 137–148). Конфигурация — `src/config/personalTests.js` |
 
 Ежедневный тест обязателен для присутствовавших (`TEST_REQUIRED` больше не читается). Набор навыков типа теста отправляется целиком; баллы не больше максимума, иначе 422. Тесты не пишутся пропустившим. В `commentHtml` уходит тема урока (экранируется). Порог успешности в мини-аппе не подсвечивается — только метрика «прошли порог» в статистике. Конфигурация — `src/config/testing.js`.
 
