@@ -73,7 +73,7 @@ test('ежедневный тест обязателен и при выбран�
 });
 
 test('сбой доп. теста → «частично», досылка пишет только его', async () => {
-  for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502 });
+  for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502, when: p => p.testTypeId === 1 });   // только доп. тест
   const key = h.uuid();
   const res = await api.request('POST', '/api/lessons', { tg: TG, body: { key, groupId: '31', date: h.WED, topic: '', personal: { categoryId: 1, testTypeId: 1 },
     students: [{ id: '3101', status: 'present', skills: DAILY, personalSkills: PROGRESS }] } });

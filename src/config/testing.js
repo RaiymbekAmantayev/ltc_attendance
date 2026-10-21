@@ -1,4 +1,4 @@
-// Тест группы в HollyHop: метод AddEditEdUnitTestResult.
+// Ежедневный тест в HollyHop: пишется как персональный (AddEditPersonalTestResult) с типом 131/132.
 // Набор навыков в запросе обязан совпадать с набором навыков типа теста, баллы — не выше максимума (требование HollyHop).
 // fixed — навык не показывается в интерфейсе, в HollyHop и БД всегда уходит default.
 const WAS_PRESENT = { id: 8, name: 'Was present for (min)', max: 45, default: 45, fixed: true };

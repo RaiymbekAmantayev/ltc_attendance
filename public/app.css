@@ -11,9 +11,7 @@
 .skills-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .sk{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;min-width:0}
 .sk span{line-height:1.25}.sk em{display:block;font-style:normal;font-weight:600;color:var(--hint);font-size:10.5px}
-.sk input{padding:9px 8px;text-align:center;font-weight:800;font-size:15px}
-.sk input.ok{border-color:var(--success);background:color-mix(in srgb,var(--success) 14%,var(--surface))}
-.sk input.bad{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,var(--surface))}
+.sk input{margin-top:auto;padding:9px 8px;text-align:center;font-weight:800;font-size:15px}
 .srow{margin-top:8px}.srow input{padding:9px 10px}
 fieldset{border:0;padding:0;margin:0;min-width:0}
 fieldset.lock .seg3 button{pointer-events:none}

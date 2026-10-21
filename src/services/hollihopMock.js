@@ -29,14 +29,14 @@ const TEST_TYPES = [131, 132];
 
 const state = { writes: [], tests: [], personal: [], failures: [] };
 
-/** Для тестов: следующий вызов метода завершится ошибкой {status, body}. */
+/** Для тестов: следующий вызов метода завершится ошибкой {status, body}; when(payload) — только подходящий вызов. */
 const failNext = (method, failure) => state.failures.push({ method, ...failure });
 const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; };
 
 const ok = body => ({ status: 200, body });
 
 async function respond(method, payload) {
-  const index = state.failures.findIndex(f => f.method === method);
+  const index = state.failures.findIndex(f => f.method === method && (!f.when || f.when(payload)));
   if (index >= 0) { const f = state.failures.splice(index, 1)[0]; return { status: f.status || 500, body: f.body ?? { Error: f.error || 'mock failure' }, headers: f.headers }; }
 
   switch (method) {
@@ -77,7 +77,12 @@ async function respond(method, payload) {
       if (!Array.isArray(payload.skills) || !payload.skills.length || payload.skills.some(k => !k.skillId || !(k.score >= 0))) {
         return { status: 400, body: { Error: 'Неверный набор навыков' } };
       }
-      state.personal.push(payload);
+      const SKILLS = SKILLS_BY_TYPE[payload.testTypeId];             // ежедневный тест 131/132 — те же проверки, что у теста группы
+      if (SKILLS && payload.skills.map(k => k.skillId).sort((x, y) => x - y).join(',') !== Object.keys(SKILLS).join(',')) {
+        return { status: 400, body: { Error: 'Набор навыков не соответствует типу теста' } };
+      }
+      if (SKILLS && payload.skills.some(k => k.score > SKILLS[k.skillId])) return { status: 400, body: { Error: 'Баллы превышают максимум' } };
+      (SKILLS ? state.tests : state.personal).push(payload);         // ежедневный тест (131/132) — в tests, доп. тест — в personal
       return ok({ Success: true });
     }
     default:

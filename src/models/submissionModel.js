@@ -2,22 +2,28 @@ const { query } = require('../config/db');
 
 exports.parse = v => (typeof v === 'string' ? JSON.parse(v) : v);
 
-exports.create = ({ key, teacherId, groupId, groupName, branch, date, payload }) => query(
-  `INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, branch, lesson_date, payload, progress)
-   VALUES (?,?,?,?,?,?,?,?)`,
-  [key, teacherId, groupId, groupName || null, branch || null, date, JSON.stringify(payload), '[]']);
+exports.create = ({ key, teacherId, groupId, groupName, branch, date, slot, payload }) => query(
+  `INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, branch, lesson_date, slot, payload, progress)
+   VALUES (?,?,?,?,?,?,?,?,?)`,
+  [key, teacherId, groupId, groupName || null, branch || null, date, slot, JSON.stringify(payload), '[]']);
 
 exports.findByKey = async key =>
   (await query('SELECT * FROM submissions WHERE idem_key = ?', [key]))[0] || null;
 
-exports.findByGroupAndDate = async (groupId, date) =>
-  (await query('SELECT * FROM submissions WHERE group_id = ? AND lesson_date = ?', [groupId, date]))[0] || null;
+/** Все отметки урока (не больше двух — от разных преподавателей). */
+exports.listByGroupAndDate = (groupId, date) =>
+  query('SELECT * FROM submissions WHERE group_id = ? AND lesson_date = ? ORDER BY slot', [groupId, date]);
 
-/** Статусы и прогресс по группам на дату: { groupId: {status, done, total} }. */
-exports.summaryByGroup = async (date, groupIds) => {
+/** Отметка урока, сделанная этим преподавателем. */
+exports.findByGroupAndDate = async (groupId, date, teacherId) =>
+  (await query('SELECT * FROM submissions WHERE group_id = ? AND lesson_date = ? AND teacher_id = ?', [groupId, date, teacherId]))[0] || null;
+
+/** Статусы и прогресс отметок преподавателя по группам на дату: { groupId: {status, done, total} }. */
+exports.summaryByGroup = async (date, groupIds, teacherId) => {
   if (!groupIds.length) return {};
   const rows = await query(
-    'SELECT group_id, status, payload, progress FROM submissions WHERE lesson_date = ? AND group_id IN (?)', [date, groupIds]);
+    'SELECT group_id, status, payload, progress FROM submissions WHERE lesson_date = ? AND group_id IN (?) AND teacher_id = ?',
+    [date, groupIds, teacherId]);
   return Object.fromEntries(rows.map(r => {
     const { total, done } = exports.progressOf(r);
     return [r.group_id, { status: r.status, done, total }];
@@ -55,7 +61,8 @@ exports.list = ({ date, status, from, to, teacherId } = {}) => {
   if (teacherId) { where.push('x.teacher_id = ?');   params.push(teacherId); }
   return query(
     `SELECT x.idem_key, x.group_id, x.group_name, x.branch, x.lesson_date, x.status, x.last_error, x.attempts,
-            x.created_at, x.payload, x.progress, x.teacher_id, t.full_name, t.branch AS teacher_branch
+            x.created_at, x.payload, x.progress, x.teacher_id, t.full_name, t.branch AS teacher_branch,
+            t.lang AS teacher_lang, t.role AS teacher_role
      FROM submissions x JOIN teachers t ON t.id = x.teacher_id
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY x.lesson_date DESC, x.id DESC LIMIT 5000`, params);
 };

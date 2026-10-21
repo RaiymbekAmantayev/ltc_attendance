@@ -22,10 +22,12 @@ router.post(API + '/teachers/import', c.importTeachers);
 
 router.get(API + '/groups', c.listGroups);
 router.get(API + '/substitutions', c.listSubstitutions);
+router.get(API + '/substitutions/busy', c.busyTeachers);
 router.post(API + '/substitutions', c.addSubstitution);
 router.delete(API + '/substitutions/:id', c.removeSubstitution);
 
 router.get(API + '/submissions', c.listSubmissions);
+router.get(API + '/export/:kind', c.exportReport);
 router.post(API + '/submissions/:key/retry', c.retrySubmission);
 router.get(API + '/audit', c.listAudit);
 

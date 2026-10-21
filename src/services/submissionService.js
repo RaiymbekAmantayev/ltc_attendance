@@ -10,6 +10,7 @@ const Ktp = require('../models/ktpModel');
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ATTEMPTS = 8;                                  // после стольких неудач подряд — «нужно внимание»
+const MAX_PER_LESSON = 2;                                // на урок не больше двух отметок, и только от разных преподавателей
 
 /** Тип теста по языку преподавателя: Foreign (en) → 131, Local (ru) → 132. */
 exports.testTypeFor = teacher => (teacher.lang === 'en' ? testing.testTypeIds.foreign : testing.testTypeIds.local);
@@ -81,6 +82,7 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
     topic: cleanTopic,
     ktpTopicId: ktpTopic ? ktpTopic.id : null,
     testTypeId: exports.testTypeFor(teacher),
+    dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
     personal: personal && {
       categoryId: personal.category.id, testTypeId: personal.type.id,
       dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
@@ -89,15 +91,31 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
   };
   if (personal && !payload.students.some(s => s.personalSkills)) throw new AppError(422, 'personal_empty');
 
+  // Своя отметка урока — одна, правка задним числом запрещена; второй комплект может прислать только другой преподаватель.
+  const existing = await Submission.listByGroupAndDate(groupId, date);
+  const mine = existing.find(r => r.teacher_id === teacher.id);
+  if (mine) {
+    if (mine.idem_key !== key) throw new AppError(409, 'already_saved');
+    return exports.push(key);                                              // повтор того же нажатия
+  }
+  if (existing.length >= MAX_PER_LESSON) throw new AppError(409, 'lesson_full');
+
   try {
-    await Submission.create({ key, teacherId: teacher.id, groupId, groupName: group.name, branch: group.branch, date, payload });
+    await Submission.create({
+      key, teacherId: teacher.id, groupId, groupName: group.name, branch: group.branch, date, slot: existing.length + 1, payload,
+    });
     await Audit.log(teacher.id, 'save', groupId, date, {
       students: payload.students.length, substitution: !!group.substitution,
     }, `teacher:${teacher.id}`);
   } catch (error) {
     if (error.code !== 'ER_DUP_ENTRY') throw error;
-    const existing = await Submission.findByGroupAndDate(groupId, date);
-    if (!existing || existing.idem_key !== key) throw new AppError(409, 'already_saved');  // правка задним числом запрещена
+    // Гонка: одновременно ушли это же нажатие, другое нажатие этого преподавателя или чужая отметка на тот же слот.
+    const saved = await Submission.findByKey(key);
+    if (!saved || saved.teacher_id !== teacher.id) {
+      const now = await Submission.listByGroupAndDate(groupId, date);
+      const full = !now.some(r => r.teacher_id === teacher.id) && now.length >= MAX_PER_LESSON;
+      throw new AppError(409, full ? 'lesson_full' : 'already_saved');
+    }
   }
   return exports.push(key);
 };

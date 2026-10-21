@@ -236,14 +236,6 @@
         <input class="pskill" type="text" inputmode="decimal" autocomplete="off" data-skill="${k.id}" data-max="${k.max}" value="${esc(values[k.id] ?? '')}"></label>`).join('')}</div>`;
   }
 
-  /** Подсветка порога успешности: балл ≥ порога — зелёный, ниже — красный (подсказка, не запрет). */
-  function paintSkill(input) {
-    const pass = input.dataset.pass;
-    input.classList.remove('ok', 'bad');
-    if (pass === '' || input.value.trim() === '') return;
-    input.classList.add(Number(input.value.replace(',', '.')) >= Number(pass) ? 'ok' : 'bad');
-  }
-
   /* Тема из КТП: темы уровня группы по категориям; выбор подставляет тему урока (её можно дописать). */
   const ktpTopic = id => (state.ktp?.categories || []).flatMap(c => c.topics).find(x => String(x.id) === String(id)) || null;
   const ktpLabel = x => [x.num != null ? `${x.num}.` : '', x.week ? fmt(T().ktpWeek, { n: x.week }) : '', x.lesson ? fmt(T().ktpLesson, { n: x.lesson }) : '', x.title]
@@ -276,10 +268,9 @@
     // Навык с значением по умолчанию подставляется в новую отметку; в сохранённой показываем то, что записано.
     const skill = k => {
       const value = saved.status ? (saved.skills ? saved.skills[k.id] : '') : (k.default ?? '');
-      const hint = k.pass != null ? ` · ${fmt(t.passHint, { n: k.pass })}` : '';
-      return `<label class="sk"><span>${esc(k.name || fmt(t.skill, { id: k.id }))}<em>0–${k.max}${esc(hint)}</em></span>
-        <input class="skill ${k.pass != null && value !== '' && value != null ? (Number(value) >= k.pass ? 'ok' : 'bad') : ''}" type="text" inputmode="decimal" autocomplete="off"
-          data-skill="${k.id}" data-max="${k.max}" data-pass="${k.pass ?? ''}" data-default="${k.default ?? ''}" value="${esc(value ?? '')}"></label>`;
+      return `<label class="sk"><span>${esc(k.name || fmt(t.skill, { id: k.id }))}<em>0–${k.max}</em></span>
+        <input class="skill" type="text" inputmode="decimal" autocomplete="off"
+          data-skill="${k.id}" data-max="${k.max}" data-default="${k.default ?? ''}" value="${esc(value ?? '')}"></label>`;
     };
     return `
       <div class="scard" data-student="${esc(s.id)}" data-name="${esc(s.name)}" data-status="${status}">
@@ -471,7 +462,6 @@
   });
   on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
   on(root, 'click', '#save', confirmSave);
-  on(root, 'input', '.skill', paintSkill);
 
   /* ============ Старт ============ */
 

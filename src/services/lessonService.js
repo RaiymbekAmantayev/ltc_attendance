@@ -21,9 +21,16 @@ exports.groupForTeacher = async (teacher, groupId, date) =>
 
 exports.canAccessGroup = async (teacher, groupId, date) => !!(await exports.groupForTeacher(teacher, groupId, date));
 
+/** Начало занятия в минутах («9:00–10:30» → 540); без времени — в конец списка. */
+const startMinutes = time => {
+  const m = /^(\d{1,2}):(\d\d)/.exec(time || '');
+  return m ? Number(m[1]) * 60 + Number(m[2]) : Infinity;
+};
+
+/** Занятия дня по порядку — с утра до вечера. */
 exports.lessonsWithStatus = async (teacher, date) => {
-  const groups = await groupsForTeacher(teacher, date);
-  const summary = await Submission.summaryByGroup(date, groups.map(g => g.id));
+  const groups = (await groupsForTeacher(teacher, date)).sort((a, b) => startMinutes(a.time) - startMinutes(b.time));
+  const summary = await Submission.summaryByGroup(date, groups.map(g => g.id), teacher.id);
   return groups.map(({ hasLessonOnDate, teacherId, ...g }) => {
     const s = summary[g.id];
     return { ...g, status: s?.status || 'none', done: s?.done ?? 0, total: s?.total ?? 0 };

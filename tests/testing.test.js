@@ -1,4 +1,4 @@
-// Тест группы в HollyHop: AddEditEdUnitTestResult (типы 131/132, навыки 8/11/13/9/10).
+// Ежедневный тест в HollyHop: персональный, AddEditPersonalTestResult (типы 131/132, навыки 8/11/13/9/10).
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./helpers');
@@ -31,7 +31,7 @@ test('тестовая группа 31: тип 132 для местного, на
   assert.equal(res.json.status, 'done', JSON.stringify(res.json));
   assert.equal(h.mock.state.writes.length, 3, 'посещаемость — всем');
   assert.equal(h.mock.state.tests.length, 2, 'тест — только присутствовавшим');
-  assert.deepEqual(h.mock.state.tests[0], { edUnitId: 31, studentClientId: 3101, date: h.WED, testTypeId: 132,
+  assert.deepEqual(h.mock.state.tests[0], { studentClientId: 3101, dateTime: `${h.WED}T09:00:00`, discipline: 'Английский', teacherId: 101, testTypeId: 132,
     skills: [{ skillId: 8, score: 45 }, { skillId: 13, score: 4 }, { skillId: 9, score: 5 }, { skillId: 10, score: 5 }], commentHtml: '' });
   assert.deepEqual(h.mock.state.tests[1].skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 3.5 }, { skillId: 9, score: 2 }, { skillId: 10, score: 2 }]);
 });
@@ -65,7 +65,7 @@ test('пропустившему тест не записывается, даж�
 });
 
 test('сбой теста → «частично», досылка не дублирует посещаемость и тест', async () => {
-  for (let i = 0; i < 5; i++) h.mock.failNext('AddEditEdUnitTestResult', { status: 502 });
+  for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502 });
   const key = h.uuid();
   const list = [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }, { id: '3102', status: 'present', skills: { 13: 4, 9: 4, 10: 4 } }];
   const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: '', students: list } });
@@ -82,7 +82,7 @@ test('сбой теста → «частично», досылка не дубл
 });
 
 test('HollyHop отклонил тест (400) → «нужно внимание» без бесконечных повторов', async () => {
-  h.mock.failNext('AddEditEdUnitTestResult', { status: 400, body: { Error: 'Набор навыков не соответствует типу теста' } });
+  h.mock.failNext('AddEditPersonalTestResult', { status: 400, body: { Error: 'Набор навыков не соответствует типу теста' } });
   const res = await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }]);
   assert.equal(res.json.status, 'attention');
   const [[row]] = await h.db.query('SELECT last_error FROM submissions');

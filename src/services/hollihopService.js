@@ -2,7 +2,7 @@
 // Из эталонного коннектора LTC: повторы с экспоненциальной паузой и jitter, уважение Retry-After,
 // таймаут, ограничение частоты (лимит HollyHop ≈ 600 запросов / 30 с), типизированные ошибки.
 const { hollihop } = require('../config/env');
-const { weekdayBit } = require('../lib/date');
+const { weekdayBit, addDays } = require('../lib/date');
 const mock = require('./hollihopMock');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
@@ -162,6 +162,65 @@ exports.groupsOnDate = date => cached(`go:${date}`, async () => {
   return EdUnits.map(u => toGroup(u, date)).filter(g => g.hasLessonOnDate);
 });
 
+/** Строки расписания на дату: какая группа, с какого по какое время и какие преподаватели (для проверки занятости при замене). */
+exports.scheduleOnDate = date => cached(`sd:${date}`, async () => {
+  const { EdUnits = [] } = await call('GetEdUnits',
+    { types: GROUP_TYPES, dateFrom: date, dateTo: date, weekdays: weekdayBit(date), statuses: 'Working' });
+  return EdUnits.flatMap(u => (u.ScheduleItems || [])
+    .filter(item => item.Weekdays & weekdayBit(date) && item.BeginTime && item.EndTime)
+    .map(item => ({ groupId: String(u.Id), group: u.Name, from: item.BeginTime, to: item.EndTime, teacherIds: (item.TeacherIds || []).map(String) })));
+});
+
+/**
+ * Занятия по расписанию за период: [{date, groupId, group, teacherIds, minutes}] — для выгрузки «Расписание».
+ * Если HollyHop отдал дни занятий (queryDays), берём их; иначе разворачиваем строки расписания по дням недели.
+ */
+exports.lessonsInRange = (from, to) => cached(`lr:${from}:${to}`, async () => {
+  const { EdUnits = [] } = await call('GetEdUnits',
+    { types: GROUP_TYPES, dateFrom: from, dateTo: to, statuses: 'Working,Stopped,Finished', queryDays: true });
+  return lessonsFromEdUnits(EdUnits, from, to);
+});
+
+const dayOf = v => String(v || '').trim().slice(0, 10);   // «2014-01-01 » и «2014-01-01T00:00:00» → дата
+const toMinutes = t => { const m = /^(\d{1,2}):(\d\d)/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+const itemMinutes = item => {
+  const a = toMinutes(item.BeginTime), b = toMinutes(item.EndTime);
+  return a != null && b != null && b > a ? b - a : null;
+};
+
+function lessonsFromEdUnits(edUnits, from, to) {
+  const out = [];
+  for (const u of edUnits) {
+    const items = u.ScheduleItems || [];
+    const byId = new Map(items.map(i => [String(i.Id), i]));
+    const push = (date, item, minutes) => out.push({
+      date, groupId: String(u.Id), group: u.Name, minutes: minutes || 0,
+      teacherIds: (item.TeacherIds || []).map(String), teacherNames: item.Teachers || [],
+    });
+    if (Array.isArray(u.Days) && u.Days.length) {
+      for (const d of u.Days) {
+        const date = dayOf(d.Date);
+        if (date < from || date > to) continue;
+        for (const id of d.ScheduleItemIds || []) {
+          const item = byId.get(String(id));
+          if (item) push(date, item, itemMinutes(item) ?? d.Minutes);
+        }
+      }
+      continue;
+    }
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      for (const item of items) {
+        if (!(item.Weekdays & weekdayBit(date))) continue;
+        if (dayOf(item.BeginDate) && dayOf(item.BeginDate) > date) continue;
+        if (dayOf(item.EndDate) && dayOf(item.EndDate) < date) continue;
+        push(date, item, itemMinutes(item));
+      }
+    }
+  }
+  return out;
+}
+exports._lessonsFromEdUnits = lessonsFromEdUnits;
+
 exports.groupById = id => cached(`gi:${id}`, async () => {
   const { EdUnits = [] } = await call('GetEdUnits', { id });
   return EdUnits[0] ? toGroup(EdUnits[0]) : null;
@@ -200,16 +259,17 @@ const escapeHtml = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': 
 exports.testEnabledFor = groupId => !testing.edUnitIds.length || testing.edUnitIds.includes(String(groupId));
 
 /**
- * Результат теста ученика: AddEditEdUnitTestResult. Повторный вызов с той же датой и типом теста
- * редактирует результат, поэтому повтор безопасен (разд. 7.1 ТЗ). Комментарий (= тема урока) уходит в commentHtml.
- * Без баллов (s.skills пуст) в HollyHop ничего не пишем — комментарий остаётся у нас.
+ * Ежедневный тест ученика — тоже персональный: AddEditPersonalTestResult с типом 131/132 (без id — добавление).
+ * У каждого преподавателя свой результат (teacherId, время его занятия), поэтому два преподавателя одного урока не затирают друг друга.
+ * Шаг идёт в общей очереди: после успеха повторно не отправляется. Комментарий (= тема урока) уходит в commentHtml.
  */
 exports.writeReport = async (groupId, date, s, payload = {}) => {
   if (!s.skills || !payload.testTypeId || !exports.testEnabledFor(groupId)) return { local: true };
-  return call('AddEditEdUnitTestResult', {
-    edUnitId: Number(groupId),
+  return call('AddEditPersonalTestResult', {
     studentClientId: Number(s.id),
-    date,
+    dateTime: payload.dateTime || `${date}T00:00:00`,      // отметки, сохранённые до перевода на персональные тесты
+    discipline: personalTests.discipline,
+    ...(payload.teacherId ? { teacherId: payload.teacherId } : {}),
     testTypeId: payload.testTypeId,
     skills: testing.skillsFor(payload.testTypeId).map(k => ({ skillId: k.id, score: Number(s.skills[k.id]) })),
     commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',

@@ -16,7 +16,7 @@ window.TEXTS = {
     status: { none: 'Не отмечено', pending: '⏳ Ждёт отправки', partial: '⚠️ Отправлено частично', attention: '⚠️ Нужно внимание', done: '✅ В HollyHop' },
     // группа
     topic: 'Тема урока', ktpPick: 'Тема из КТП · {level}', ktpWeek: 'Нед. {n} ·', ktpLesson: 'Урок {n} ·', ktpSection: 'Секция', ktpPage: 'Стр. SB', ktpGrammar: 'Грамматика', ktpVocabulary: 'Лексика', ktpHomework: 'Домашнее задание', ktpTest: 'Тест/контроль',
-    test: 'Ежедневный тест', personalTest: 'Доп. тест', personalNone: 'Без доп. теста', personalPickType: 'Тип теста…', skill: 'Навык {id}', passHint: 'порог {n}', comment: 'Комментарий', save: 'Сохранить',
+    test: 'Ежедневный тест', personalTest: 'Доп. тест', personalNone: 'Без доп. теста', personalPickType: 'Тип теста…', skill: 'Навык {id}', comment: 'Комментарий', save: 'Сохранить',
     present: 'Был', absent: 'Пропуск',
     readOnly: 'Отметка сохранена — только чтение. Исправления вносит куратор.',
     attentionNote: 'Запись в HollyHop не прошла. Это не ваша ошибка — сообщение уже у администратора.',
@@ -43,7 +43,7 @@ needTest: 'Ежедневный тест обязателен: {name}', needTest
     // преподаватели
     teachersTitle: 'Преподаватели', done: 'Записано', problemsShort: 'Проблем', noTelegram: 'нет Telegram ID', inactive: 'неактивен',
     errors: {
-      forbidden: 'Нет доступа к этой группе', already_saved: 'Это занятие уже отмечено', bad_request: 'Некорректные данные',
+      forbidden: 'Нет доступа к этой группе', already_saved: 'Это занятие уже отмечено', lesson_full: 'На это занятие уже есть две отметки', bad_request: 'Некорректные данные',
       unknown_student: 'Ученик не из этой группы', test_required: 'Тест обязателен', test_incomplete: 'Нужны баллы по всем навыкам теста', bad_personal_test: 'Неизвестный доп. тест', personal_empty: 'Доп. тест выбран, но баллы не введены', comment_required: 'Тема урока обязательна',
       score_out_of_range: 'Балл вне допустимого диапазона', bad_score: 'Балл должен быть числом', rate_limited: 'Слишком часто, подождите минуту',
       bad_init_data: 'Сессия Telegram устарела — откройте кабинет заново', server: 'Ошибка сервера',
@@ -63,7 +63,7 @@ needTest: 'Ежедневный тест обязателен: {name}', needTest
     written: 'written {done} of {total}',
     status: { none: 'Not marked', pending: '⏳ Pending', partial: '⚠️ Partially sent', attention: '⚠️ Needs attention', done: '✅ In HollyHop' },
     topic: 'Lesson topic', ktpPick: 'Topic from the plan · {level}', ktpWeek: 'Wk {n} ·', ktpLesson: 'Lesson {n} ·', ktpSection: 'Section', ktpPage: 'SB page', ktpGrammar: 'Grammar', ktpVocabulary: 'Vocabulary', ktpHomework: 'Homework', ktpTest: 'Test/control',
-    test: 'Daily test', personalTest: 'Extra test', personalNone: 'No extra test', personalPickType: 'Test type…', skill: 'Skill {id}', passHint: 'pass {n}', comment: 'Comment', save: 'Save',
+    test: 'Daily test', personalTest: 'Extra test', personalNone: 'No extra test', personalPickType: 'Test type…', skill: 'Skill {id}', comment: 'Comment', save: 'Save',
     present: 'Present', absent: 'Absent',
     readOnly: 'Saved — read only. Corrections are made by your supervisor.',
     attentionNote: 'Writing to HollyHop failed. This is not your fault — the administrator has been notified.',
@@ -86,7 +86,7 @@ needTest: 'The daily test is required: {name}', needTestFull: 'Enter scores for 
     csv: 'Download CSV', exportGroups: 'Groups export', exportTeachers: 'Teachers export',
     teachersTitle: 'Teachers', done: 'Written', problemsShort: 'Issues', noTelegram: 'no Telegram ID', inactive: 'inactive',
     errors: {
-      forbidden: 'No access to this group', already_saved: 'This lesson is already marked', bad_request: 'Invalid data',
+      forbidden: 'No access to this group', already_saved: 'This lesson is already marked', lesson_full: 'This lesson already has two submissions', bad_request: 'Invalid data',
       unknown_student: 'Student is not in this group', test_required: 'Test is required', test_incomplete: 'Scores for all test skills are required', bad_personal_test: 'Unknown extra test', personal_empty: 'Extra test selected but no scores entered', comment_required: 'Lesson topic is required',
       score_out_of_range: 'Score is out of range', bad_score: 'Score must be a number', rate_limited: 'Too many requests, wait a minute',
       bad_init_data: 'Telegram session expired — reopen the cabinet', server: 'Server error',

@@ -27,7 +27,7 @@ exports.groupStudents = async (req, res) => {
   const group = lessons.isDate(date) && await lessons.groupForTeacher(req.teacher, id, date);
   if (!group) throw new AppError(403, 'forbidden');
 
-  const saved = await Submission.findByGroupAndDate(id, date);
+  const saved = await Submission.findByGroupAndDate(id, date, req.teacher.id);   // своя отметка; у второго преподавателя — своя
   const level = levels.normalize(group.level);              // «Inter + (plus)» → Intermediate Plus
   res.json({
     students: await hollihop.students(id),

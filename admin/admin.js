@@ -3,7 +3,7 @@
   const { $, $$, on, esc } = LTC;
   const main = $('#main'), root = document.getElementById('app');
 
-  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['ktp', 'КТП'], ['audit', 'Аудит'], ['rules', 'Правила']];
+  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['export', 'Выгрузка'], ['ktp', 'КТП'], ['audit', 'Аудит'], ['rules', 'Правила']];
   const STATUS = { done: ['good', '✅ В HollyHop'], pending: ['warn', '⏳ Ждёт отправки'], partial: ['warn', '⚠️ Частично'], attention: ['bad', '⚠️ Нужно внимание'] };
   const ROLE = { teacher: 'Преподаватель', coordinator: 'Координатор', director: 'Директор' };
   const ACTION = {
@@ -182,14 +182,19 @@
   });
 
   /* ---------- Замены ---------- */
+  // Кто занят во время выбранного занятия: { teacherId: [{group, time}] } — такого назначить нельзя.
+  let subTeachers = [], busy = {};
+  const busyText = list => 'занят ' + list.map(x => `${x.time} · ${x.group}`).join('; ');
   views.subs = async () => {
     const [all, subs] = await Promise.all([api('/teachers'), api('/substitutions')]);
-    const options = all.filter(t => t.active && t.role === 'teacher').map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('');
+    subTeachers = all.filter(t => t.active && t.role === 'teacher');
+    busy = {};
     main.innerHTML = `
       <div class="card"><div class="card-title">Замена на дату</div>
         <p class="hint">Заменяющий увидит группу только в этот день. В журнале фиксируется реальный автор отметки.</p>
-        <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow">${options}</select>
-        <button class="btn" data-act="add-sub">Назначить</button></div></div>
+        <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow"></select>
+        <button class="btn" data-act="add-sub">Назначить</button></div>
+        <div id="s-busy" class="err" hidden></div></div>
       <div class="card"><div class="card-title">Последние замены</div>
         ${subs.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа (ID)</th><th class="left">Заменяет</th><th></th></tr>
           ${subs.map(x => `<tr><td>${esc(x.lesson_date)}</td><td class="left">${esc(x.group_id)}</td><td class="left">${esc(x.full_name)}</td><td class="act"><button class="btn ghost sm" data-rm-sub="${x.id}">Убрать</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Замен нет</div>'}</div>`;
@@ -202,9 +207,35 @@
       const groups = await api('/groups?date=' + $('#s-date').value);
       select.innerHTML = groups.length ? groups.map(g => `<option value="${esc(g.id)}">${esc(g.name)} · ${esc(g.branch)} ${esc(g.time)}</option>`).join('') : '<option value="">в этот день занятий нет</option>';
     } catch (e) { select.innerHTML = `<option value="">${esc(e.message)}</option>`; }
+    loadBusy();
+  }
+  /** Занятость преподавателей на время выбранной группы: занятые помечены красным в списке. */
+  async function loadBusy() {
+    const select = $('#s-teacher'); if (!select) return;
+    const group = $('#s-group').value, date = $('#s-date').value, chosen = select.value;
+    busy = {};
+    if (group) {
+      try { busy = await api(`/substitutions/busy?date=${date}&group=${encodeURIComponent(group)}`); }
+      catch (e) { LTC.toast('Не удалось проверить занятость: ' + e.message, 'bad'); }
+    }
+    select.innerHTML = subTeachers.map(t => busy[t.id]
+      ? `<option value="${t.id}" class="busy">${esc(t.full_name)} — ${esc(busyText(busy[t.id]))}</option>`
+      : `<option value="${t.id}">${esc(t.full_name)}</option>`).join('');
+    if (chosen) select.value = chosen;
+    paintBusy();
+  }
+  /** Выбран занятый преподаватель — ошибка под списком, кнопка «Назначить» недоступна. */
+  function paintBusy() {
+    const box = $('#s-busy'), list = busy[$('#s-teacher').value];
+    box.hidden = !list;
+    box.textContent = list ? `Нельзя выбрать этого преподавателя: на это время есть занятие (${busyText(list)})` : '';
+    $('[data-act="add-sub"]').disabled = !!list;
   }
   on(root, 'change', '#s-date', loadGroups);
+  on(root, 'change', '#s-group', loadBusy);
+  on(root, 'change', '#s-teacher', paintBusy);
   on(root, 'click', '[data-act="add-sub"]', async () => {
+    if (busy[$('#s-teacher').value]) return paintBusy();
     try { await api('/substitutions', { method: 'POST', body: { group_id: $('#s-group').value, lesson_date: $('#s-date').value, substitute_id: $('#s-teacher').value } }); LTC.toast('Замена назначена', 'good'); show('subs'); }
     catch (e) { LTC.toast(e.message, 'bad'); }
   });
@@ -251,6 +282,50 @@
   });
   on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
     submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
+
+  /* ---------- Выгрузка: расписание (HollyHop) и фактические отметки по дням ---------- */
+  /** Расчётный период по умолчанию: с 21-го числа по 20-е следующего месяца. */
+  const payPeriod = () => {
+    const today = LTC.localToday(), [y, m, d] = today.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1 - (d >= 21 ? 0 : 1), 21));
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 20));
+    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+  };
+  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign' };
+  let expCache = {};                                     // переключение листа не перезапрашивает HollyHop
+  views.export = async () => {
+    const f = state.exp, schedule = f.kind === 'schedule', range = `from=${f.from}&to=${f.to}`, key = `${f.kind}:${range}`;
+    // Расписание — тяжёлый запрос к HollyHop: только по кнопке «Показать», не при открытии раздела или вкладки.
+    const requested = f.go; f.go = false;
+    const rep = expCache[key] || (schedule && !requested ? null : (expCache[key] = await api(`/export/${f.kind}?${range}`)));
+    if (rep && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = rep.sheets[0].key;
+    const sheet = rep && rep.sheets.find(x => x.key === f.sheet);
+    const pill = (attr, value, label, active) => `<button class="pill ${active ? 'active' : ''}" ${attr}="${value}">${esc(label)}</button>`;
+    const day = d => (schedule ? `${Number(d.slice(8))}.${d.slice(5, 7)}` : String(Number(d.slice(8))));
+    main.innerHTML = `
+      <div class="toolbar">
+        <input type="date" id="e-from" value="${f.from}"><span class="mut">—</span><input type="date" id="e-to" value="${f.to}">
+        <button class="btn sm" data-act="exp-go">Показать</button>
+        ${pill('data-exp-kind', 'schedule', 'Расписание', schedule)}${pill('data-exp-kind', 'submissions', 'Фактические отметки', !schedule)}
+        ${rep ? `<a class="btn ghost sm" style="margin-left:auto" href="/admin-api/export/${f.kind}?${range}&format=xlsx" download>📥 Excel</a>` : ''}
+      </div>
+      <p class="hint">${schedule
+        ? 'Уроки по расписанию HollyHop: сколько занятий по группам у преподавателя в каждый день. Ак. час — 45 минут. Ставку и ЗП заполните в Excel — ЗП посчитается формулой.'
+        : 'Уроки, которые преподаватели отметили в кабинете и отправили в HollyHop, по дням. Автор — тот, кто заполнил (в том числе на замене).'}</p>
+      ${rep ? `<div class="toolbar">${rep.sheets.map(x => pill('data-exp-sheet', x.key, `${x.name} · ${x.rows.length}`, x.key === f.sheet)).join('')}</div>
+      <div class="card"><div class="tscroll"><table class="exp">
+        <tr><th>№</th><th class="left">ФИО</th><th class="left">Должность</th>${rep.days.map(d => `<th>${esc(day(d))}</th>`).join('')}<th>Уроков</th>${schedule ? '<th>Ак. часы</th>' : ''}</tr>
+        ${sheet.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.name)}</td><td class="left">${esc(r.position)}</td>
+          ${rep.days.map(d => `<td>${r.counts[d] || ''}</td>`).join('')}<td><b>${r.lessons}</b></td>${schedule ? `<td>${r.hours}</td>` : ''}</tr>`).join('')}
+      </table></div>${sheet.rows.length ? '' : '<div class="empty">Нет данных за период</div>'}</div>`
+      : '<div class="card"><div class="empty">Выберите период и нажмите «Показать» — расписание загрузится из HollyHop</div></div>'}`;
+  };
+  on(root, 'click', '[data-act="exp-go"]', () => {
+    const a = $('#e-from').value, b = $('#e-to').value;
+    if (a && b) { Object.assign(state.exp, a <= b ? { from: a, to: b } : { from: b, to: a }, { go: true }); expCache = {}; show('export'); }
+  });
+  on(root, 'click', '[data-exp-kind]', el => { state.exp.kind = el.dataset.expKind; show('export'); });
+  on(root, 'click', '[data-exp-sheet]', el => { state.exp.sheet = el.dataset.expSheet; show('export'); });
 
   /* ---------- КТП: категории и темы по уровням ---------- */
   // Колонки в порядке таблицы КТП — в этом же порядке вставляются строки из Excel.

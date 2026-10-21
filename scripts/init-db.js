@@ -11,6 +11,7 @@ const COLUMNS = [
   ['submissions', 'group_name', 'ADD COLUMN group_name VARCHAR(255) NULL AFTER lesson_date'],
   ['submissions', 'branch', 'ADD COLUMN branch VARCHAR(100) NULL AFTER group_name'],
   ['submissions', 'attempts', 'ADD COLUMN attempts INT NOT NULL DEFAULT 0 AFTER last_error'],
+  ['submissions', 'slot', 'ADD COLUMN slot TINYINT NOT NULL DEFAULT 1 AFTER attempts'],
   ['audit_log', 'actor', 'ADD COLUMN actor VARCHAR(100) NULL AFTER teacher_id'],
 ];
 
@@ -30,6 +31,17 @@ const COLUMNS = [
       [dbName, table, column]);
     if (!rows.length) { await connection.query(`ALTER TABLE \`${table}\` ${ddl}`); console.log(`миграция: ${table}.${column}`); }
   }
+  // v0.4: на урок до двух отметок от разных преподавателей — вместо UNIQUE(group_id, lesson_date) два ключа.
+  const [indexes] = await connection.query(
+    `SELECT index_name name, GROUP_CONCAT(column_name ORDER BY seq_in_index) cols FROM information_schema.statistics
+     WHERE table_schema = ? AND table_name = 'submissions' AND non_unique = 0 GROUP BY index_name`, [dbName]);
+  for (const { name, cols } of indexes) {
+    if (cols === 'group_id,lesson_date') { await connection.query(`ALTER TABLE submissions DROP INDEX \`${name}\``); console.log('миграция: submissions — снят ключ «одна отметка на урок»'); }
+  }
+  const names = new Set(indexes.map(i => i.name));
+  if (!names.has('uq_lesson_teacher')) await connection.query('ALTER TABLE submissions ADD UNIQUE KEY uq_lesson_teacher(group_id, lesson_date, teacher_id)');
+  if (!names.has('uq_lesson_slot')) await connection.query('ALTER TABLE submissions ADD UNIQUE KEY uq_lesson_slot(group_id, lesson_date, slot)');
+
   // hollihop_id теперь может быть пустым (директор/координатор)
   await connection.query('ALTER TABLE teachers MODIFY hollihop_id VARCHAR(64) NULL');
 

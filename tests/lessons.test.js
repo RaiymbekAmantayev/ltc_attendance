@@ -2,14 +2,15 @@ const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./helpers');
 
-let api, t1, t2;
-const TG = { teacher: 1001, other: 1002, coord: 1003, director: 999, stranger: 5555 };
+let api, t1, t2, t3;
+const TG = { teacher: 1001, other: 1002, coord: 1003, director: 999, stranger: 5555, third: 1004 };
 
 before(async () => {
   await h.setupDb();
   t1 = await h.addTeacher({ telegram_id: TG.teacher, hollihop_id: '101', full_name: 'Иванова Анна' });
   t2 = await h.addTeacher({ telegram_id: TG.other, hollihop_id: '102', full_name: 'Smith John', lang: 'en' });
   await h.addTeacher({ telegram_id: TG.coord, full_name: 'Координатор', role: 'coordinator' });
+  t3 = await h.addTeacher({ telegram_id: TG.third, hollihop_id: '103', full_name: 'Сатпаева Алия' });
   api = await h.start();
 });
 after(() => api.close());
@@ -51,7 +52,8 @@ test('сохранение пишет посещаемость в HollyHop; по
   assert.equal(h.mock.state.tests.length, list.length - 1);   // всем, кроме пропустившего
   const test = h.mock.state.tests[0];
   assert.equal(test.testTypeId, 132);
-  assert.equal(test.edUnitId, 9001);
+  assert.equal(test.teacherId, 101);
+  assert.equal(test.dateTime, `${h.WED}T10:00:00`);           // начало занятия по расписанию
   assert.deepEqual(test.skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 5 }, { skillId: 9, score: 4 }, { skillId: 10, score: 4 }]);
   assert.equal(test.commentHtml, 'Past Simple');
 
@@ -69,6 +71,35 @@ test('правка задним числом запрещена: другое н
   assert.equal(edit.status, 409);
   const view = await api.request('GET', `/api/groups/9001/students?date=${h.WED}`, { tg: TG.teacher });
   assert.equal(view.json.submitted.payload.topic, 'Past Simple');
+});
+
+test('второй преподаватель того же урока отмечает своё; третьей отметки нет', async () => {
+  await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9001', lesson_date: h.WED, substitute_id: t2 } });
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
+  assert.equal((await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) })).json.status, 'done');
+
+  // у второго преподавателя форма открыта: он видит только свою отметку
+  const view = (await api.request('GET', `/api/groups/9001/students?date=${h.WED}`, { tg: TG.other })).json;
+  assert.equal(view.submitted, null);
+  assert.equal((await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.other })).json.find(g => g.id === '9001').status, 'none');
+
+  const foreign = list.map(s => ({ ...s, skills: { 11: 5, 9: 5, 10: 5 } }));          // Foreign → тип 131
+  const second = await api.request('POST', '/api/lessons', { tg: TG.other, body: body(h.uuid(), '9001', foreign) });
+  assert.equal(second.json.status, 'done', JSON.stringify(second.json));
+  assert.deepEqual([...new Set(h.mock.state.tests.map(t => t.teacherId))], [101, 102], 'у каждого преподавателя свой тест');
+  assert.equal((await api.request('POST', '/api/lessons', { tg: TG.other, body: body(h.uuid(), '9001', foreign) })).json.error, 'already_saved');
+
+  await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9001', lesson_date: h.WED, substitute_id: t3 } });
+  const third = await api.request('POST', '/api/lessons', { tg: TG.third, body: body(h.uuid(), '9001', list) });
+  assert.equal(third.status, 409);
+  assert.equal(third.json.error, 'lesson_full');
+  const [rows] = await h.db.query('SELECT teacher_id, slot FROM submissions WHERE group_id="9001" ORDER BY slot');
+  assert.deepEqual(rows.map(r => [r.teacher_id, r.slot]), [[t1, 1], [t2, 2]]);
+});
+
+test('занятия идут по порядку — с утра до вечера', async () => {
+  const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
+  assert.deepEqual(lessons.map(g => g.time), ['09:00–10:00', '10:00–11:30', '15:00–16:30']);
 });
 
 test('защита: чужая группа, ученик не из группы, плохие данные', async () => {
@@ -144,4 +175,22 @@ test('аудит-лог пишет автора, а профиль считае�
   await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) });
   const audit = (await api.request('GET', '/admin-api/audit', { admin: true })).json;
   assert.ok(audit.find(a => a.action === 'save' && a.actor === `teacher:${t1}`));
+});
+
+test('замена в админке: занятого в это время преподавателя назначить нельзя', async () => {
+  const busy = async group => (await api.request('GET', `/admin-api/substitutions/busy?date=${h.WED}&group=${group}`, { admin: true })).json;
+  // 31 — 09:00–10:00: своя группа у Ивановой и Kids Starter 09:00–10:00 у Сатпаевой; 9001 (10:00–11:30) с 09:00–10:00 не пересекается
+  const at31 = await busy('31');
+  assert.deepEqual(Object.keys(at31).map(Number).sort(), [t1, t3].sort());
+  assert.equal(at31[t3][0].time, '09:00–10:00');
+  assert.deepEqual(Object.keys(await busy('9001')).map(Number), [t1]);
+
+  const add = substitute_id => api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '31', lesson_date: h.WED, substitute_id } });
+  const refused = await add(t3);
+  assert.equal(refused.status, 409);
+  assert.match(refused.json.error, /09:00–10:00 · Kids Starter/);
+  assert.equal((await add(t2)).status, 200);
+  // уже назначенная замена занимает время в других группах: Kids Starter тоже 09:00–10:00
+  assert.deepEqual(Object.keys(await busy('9005')).map(Number).sort(), [t1, t2, t3].sort());
+  assert.deepEqual(Object.keys(await busy('31')).map(Number).sort(), [t1, t3].sort(), 'своя замена в этой же группе — не занятость');
 });
