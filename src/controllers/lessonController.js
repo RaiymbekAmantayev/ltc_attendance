@@ -9,6 +9,7 @@ const { AppError } = require('../middleware/errorHandler');
 const { rules, lowFillThreshold } = require('../config/env');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
+const translit = require('../lib/translit');
 
 exports.me = (req, res) => res.json({
   name: req.teacher.full_name, lang: req.teacher.lang, role: req.teacher.role,
@@ -30,7 +31,7 @@ exports.groupStudents = async (req, res) => {
   const saved = await Submission.findByGroupAndDate(id, date, req.teacher.id);   // своя отметка; у второго преподавателя — своя
   const level = levels.normalize(group.level);              // «Inter + (plus)» → Intermediate Plus
   res.json({
-    students: await hollihop.students(id),
+    students: (await hollihop.students(id)).map(s => req.teacher.lang === 'en' ? { ...s, name: translit(s.name) } : s),   // Foreign — ФИО латиницей
     submitted: saved ? { status: saved.status, payload: Submission.parse(saved.payload) } : null,
     ktp: { level, categories: await Ktp.forLevel(level) },  // темы КТП уровня группы по категориям
   });

@@ -67,6 +67,12 @@ exports.list = ({ date, status, from, to, teacherId } = {}) => {
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY x.lesson_date DESC, x.id DESC LIMIT 5000`, params);
 };
 
+/** Отметки за период для выгрузки тестов — страницами по id (без LIMIT 5000 у list): только нужные поля. */
+exports.pageForTests = (from, to, afterId, limit) => query(
+  `SELECT x.id, x.group_id, x.group_name, x.lesson_date, x.teacher_id, x.payload, t.full_name
+   FROM submissions x JOIN teachers t ON t.id = x.teacher_id
+   WHERE x.lesson_date BETWEEN ? AND ? AND x.id > ? ORDER BY x.id LIMIT ?`, [from, to, afterId, limit]);
+
 exports.countByStatus = async (from, to) => {
   const rows = await query(
     'SELECT status, COUNT(*) n FROM submissions WHERE lesson_date BETWEEN ? AND ? GROUP BY status', [from, to]);

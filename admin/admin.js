@@ -283,7 +283,7 @@
   on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
     submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
 
-  /* ---------- Выгрузка: расписание (HollyHop) и фактические отметки по дням ---------- */
+  /* ---------- Выгрузка: расписание (HollyHop), фактические отметки по дням, тесты учеников ---------- */
   /** Расчётный период по умолчанию: с 21-го числа по 20-е следующего месяца. */
   const payPeriod = () => {
     const today = LTC.localToday(), [y, m, d] = today.split('-').map(Number);
@@ -298,7 +298,8 @@
     // Расписание — тяжёлый запрос к HollyHop: только по кнопке «Показать», не при открытии раздела или вкладки.
     const requested = f.go; f.go = false;
     const rep = expCache[key] || (schedule && !requested ? null : (expCache[key] = await api(`/export/${f.kind}?${range}`)));
-    if (rep && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = rep.sheets[0].key;
+    const tests = f.kind === 'tests';
+    if (rep && !tests && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = rep.sheets[0].key;
     const sheet = rep && rep.sheets.find(x => x.key === f.sheet);
     const pill = (attr, value, label, active) => `<button class="pill ${active ? 'active' : ''}" ${attr}="${value}">${esc(label)}</button>`;
     const day = d => (schedule ? `${Number(d.slice(8))}.${d.slice(5, 7)}` : String(Number(d.slice(8))));
@@ -306,13 +307,14 @@
       <div class="toolbar">
         <input type="date" id="e-from" value="${f.from}"><span class="mut">—</span><input type="date" id="e-to" value="${f.to}">
         <button class="btn sm" data-act="exp-go">Показать</button>
-        ${pill('data-exp-kind', 'schedule', 'Расписание', schedule)}${pill('data-exp-kind', 'submissions', 'Фактические отметки', !schedule)}
+        ${pill('data-exp-kind', 'schedule', 'Расписание', schedule)}${pill('data-exp-kind', 'submissions', 'Фактические отметки', f.kind === 'submissions')}${pill('data-exp-kind', 'tests', 'Тесты учеников', tests)}
         ${rep ? `<a class="btn ghost sm" style="margin-left:auto" href="/admin-api/export/${f.kind}?${range}&format=xlsx" download>📥 Excel</a>` : ''}
       </div>
       <p class="hint">${schedule
         ? 'Уроки по расписанию HollyHop: сколько занятий по группам у преподавателя в каждый день. Ак. час — 45 минут. Ставку и ЗП заполните в Excel — ЗП посчитается формулой.'
+        : tests ? 'Результаты доп. тестов по каждому ученику (по листу на категорию) и средние баллы ежедневного теста. Только тесты, внесённые через кабинет. Период — до года.'
         : 'Уроки, которые преподаватели отметили в кабинете и отправили в HollyHop, по дням. Автор — тот, кто заполнил (в том числе на замене).'}</p>
-      ${rep ? `<div class="toolbar">${rep.sheets.map(x => pill('data-exp-sheet', x.key, `${x.name} · ${x.rows.length}`, x.key === f.sheet)).join('')}</div>
+      ${tests ? testsView(rep, f) : rep ? `<div class="toolbar">${rep.sheets.map(x => pill('data-exp-sheet', x.key, `${x.name} · ${x.rows.length}`, x.key === f.sheet)).join('')}</div>
       <div class="card"><div class="tscroll"><table class="exp">
         <tr><th>№</th><th class="left">ФИО</th><th class="left">Должность</th>${rep.days.map(d => `<th>${esc(day(d))}</th>`).join('')}<th>Уроков</th>${schedule ? '<th>Ак. часы</th>' : ''}</tr>
         ${sheet.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.name)}</td><td class="left">${esc(r.position)}</td>
@@ -320,6 +322,38 @@
       </table></div>${sheet.rows.length ? '' : '<div class="empty">Нет данных за период</div>'}</div>`
       : '<div class="card"><div class="empty">Выберите период и нажмите «Показать» — расписание загрузится из HollyHop</div></div>'}`;
   };
+  /** Тесты учеников: «Отчет» по уровням или лист категории / Daily test. */
+  const BANDS = [['good', '≥80%', 'sev-ok'], ['mid', '70–79%', 'sev-warn'], ['bad', '<70%', 'sev-crit']];
+  const bandOf = pct => (pct >= 0.8 ? BANDS[0] : pct >= 0.7 ? BANDS[1] : BANDS[2]);
+  const pct = v => `${(v * 100).toFixed(1)}%`;
+  function testsView(rep, f) {
+    const pill = (key, label) => `<button class="pill ${key === f.sheet ? 'active' : ''}" data-exp-sheet="${key}">${esc(label)}</button>`;
+    if (f.sheet !== 'summary' && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = 'summary';
+    const pills = `<div class="toolbar">${pill('summary', 'Отчет')}${rep.sheets.map(x => pill(x.key, `${x.name} · ${x.rows.length}`)).join('')}</div>`;
+    if (f.sheet === 'summary') {
+      if (!rep.summary.length) return `${pills}<div class="card"><div class="empty">Нет доп. тестов за период</div></div>`;
+      return pills + rep.summary.map(b => {
+        const total = b.levels.reduce((a, l) => ({ count: a.count + l.count, good: a.good + l.good, mid: a.mid + l.mid, bad: a.bad + l.bad }), { count: 0, good: 0, mid: 0, bad: 0 });
+        return `<div class="card"><div class="card-title">${esc(b.name)}</div><div class="tscroll"><table class="exp">
+          <tr><th class="left">Уровень</th><th>Количество сдавших</th>${BANDS.map(([, label]) => `<th>${label}</th>`).join('')}</tr>
+          ${b.levels.map(l => `<tr><td class="left">${esc(l.level)}</td><td>${l.count}</td>${BANDS.map(([k]) => `<td>${l[k]}</td>`).join('')}</tr>`).join('')}
+          <tr><td class="left"><b>Итого</b></td><td><b>${total.count}</b></td>${BANDS.map(([k, , cls]) => `<td class="${cls}">${total[k]} · ${total.count ? Math.round(total[k] / total.count * 100) : 0}%</td>`).join('')}</tr>
+        </table></div></div>`;
+      }).join('');
+    }
+    const sheet = rep.sheets.find(x => x.key === f.sheet);
+    const info = (r, key) => (key === 'date' ? r.date.split('-').reverse().join('.') : r[key]);
+    return `${pills}<div class="card"><div class="tscroll"><table class="exp">
+      <tr><th>№</th><th class="left">Ученик</th><th class="left">Преподаватель</th><th class="left">Группа</th><th class="left">Уровень</th>
+        ${sheet.info.map(([, label]) => `<th>${esc(label)}</th>`).join('')}
+        ${sheet.skills.map(k => `<th>${esc(k.name)}${k.max != null ? `<br><span class="mut">${k.max}</span>` : ''}</th>`).join('')}
+        <th>${sheet.average ? 'Средний балл' : 'Результат'}</th><th>%</th></tr>
+      ${sheet.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.student)}</td><td class="left">${esc(r.teacher)}</td><td class="left">${esc(r.group)}</td><td class="left">${esc(r.level)}</td>
+        ${sheet.info.map(([key]) => `<td>${esc(info(r, key))}</td>`).join('')}
+        ${sheet.skills.map(k => { const v = r.scores[k.id]; return `<td${Number(v) === 0 ? ' class="sev-crit"' : ''}>${v ?? ''}</td>`; }).join('')}
+        <td><b>${r.total}</b> / ${r.max}</td><td class="${bandOf(r.pct)[2]}">${pct(r.pct)}</td></tr>`).join('')}
+    </table></div></div>`;
+  }
   on(root, 'click', '[data-act="exp-go"]', () => {
     const a = $('#e-from').value, b = $('#e-to').value;
     if (a && b) { Object.assign(state.exp, a <= b ? { from: a, to: b } : { from: b, to: a }, { go: true }); expCache = {}; show('export'); }

@@ -40,6 +40,13 @@ test('преподаватель видит только свои группы �
   assert.equal(foreign.status, 403);
 });
 
+test('иностранному преподавателю ФИО учеников приходят латиницей', async () => {
+  assert.equal((await students('9001'))[0].name, 'Аян Сериков');
+  const roster = (await api.request('GET', `/api/groups/9002/students?date=${h.WED}`, { tg: TG.other })).json.students;
+  assert.ok(roster.every(s => !/[Ѐ-ӿ]/.test(s.name)));
+  assert.equal(roster[0].name, 'Ayan Serikov');
+});
+
 test('сохранение пишет посещаемость в HollyHop; повтор того же нажатия не дублирует', async () => {
   const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', skills: i === 0 ? null : { 13: '5', 9: '4', 10: '4' }, comment: 'не используется' }));
   const key = h.uuid();

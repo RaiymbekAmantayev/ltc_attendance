@@ -1,26 +1,29 @@
-// Выгрузка для админки: «Расписание» (из HollyHop) и «Фактические отметки» (наши сабмиты) — уроки преподавателей по дням.
+// Выгрузка для админки: «Расписание» (из HollyHop) и «Фактические отметки» (наши сабмиты) — уроки преподавателей по дням;
+// «Тесты учеников» — результаты доп. и ежедневных тестов (testsExportService).
 // Листы: иностранные и местные преподаватели — по ФИО: латиница — иностранный, кириллица — местный.
 const hollihop = require('./hollihopService');
 const Submission = require('../models/submissionModel');
 const Teacher = require('../models/teacherModel');
 const xlsx = require('../lib/xlsx');
+const testsExport = require('./testsExportService');
 const { isDate, addDays } = require('../lib/date');
 const { AppError } = require('../middleware/errorHandler');
 
 const MAX_DAYS = 62;
+const TESTS_MAX_DAYS = 366;                              // тесты смотрят за четверть и за год
 const ACADEMIC_HOUR = 45;                                // минут в академическом часе
 const POSITION = { teacher: 'преподаватель', coordinator: 'координатор', director: 'директор' };
 const SHEETS = [['foreign', 'Иностранные'], ['local', 'Местные']];
-const KINDS = { schedule: 'Расписание', submissions: 'Фактические отметки' };
+const KINDS = { schedule: 'Расписание', submissions: 'Фактические отметки', tests: 'Тесты учеников' };
 
 exports.KINDS = KINDS;
 
-/** Проверенный период не длиннее MAX_DAYS; иначе 400. */
-exports.period = (from, to) => {
+/** Проверенный период не длиннее maxDays; иначе 400. */
+exports.period = (from, to, maxDays = MAX_DAYS) => {
   if (!isDate(from) || !isDate(to) || from > to) throw new AppError(400, 'Укажите дату начала и дату конца');
   const days = [];
   for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
-  if (days.length > MAX_DAYS) throw new AppError(400, `Период не длиннее ${MAX_DAYS} дней`);
+  if (days.length > maxDays) throw new AppError(400, `Период не длиннее ${maxDays} дней`);
   return days;
 };
 
@@ -80,6 +83,12 @@ exports.submissions = async (from, to) => {
   return report('submissions', from, to, days, rows);
 };
 
+/** Тесты учеников за период: доп. тесты по категориям и средние ежедневного теста. */
+exports.tests = async (from, to) => {
+  exports.period(from, to, TESTS_MAX_DAYS);
+  return testsExport.report(from, to);
+};
+
 /** Подпись дня в шапке: у расписания «21.09», у отметок — число месяца. */
 const dayLabel = (kind, iso) => (kind === 'schedule' ? `${Number(iso.slice(8))}.${iso.slice(5, 7)}` : String(Number(iso.slice(8))));
 exports.dayLabel = dayLabel;
@@ -117,6 +126,6 @@ function sheet(rep, { name, rows }) {
 }
 
 /** Книга Excel: лист иностранных и лист местных преподавателей. */
-exports.toXlsx = rep => xlsx.build(rep.sheets.map(s => sheet(rep, s)));
+exports.toXlsx = rep => (rep.kind === 'tests' ? testsExport.toXlsx(rep) : xlsx.build(rep.sheets.map(s => sheet(rep, s))));
 
 exports.fileName = rep => `LTC_${rep.kind}_${rep.from}_${rep.to}.xlsx`;

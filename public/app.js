@@ -276,7 +276,7 @@
       <div class="scard" data-student="${esc(s.id)}" data-name="${esc(s.name)}" data-status="${status}">
         <div class="tcard-top"><div class="avatar">${esc(LTC.initial(s.name))}</div><div class="tcard-name grow">${esc(s.name)}</div></div>
         <div class="seg3" role="group">${seg('present', 'p')}${seg('absent', 'a')}</div>
-        <div class="skills" ${status === 'absent' ? 'hidden' : ''}><div class="skills-title">${esc(t.test)}</div><div class="skills-grid">${skillsOf().map(skill).join('')}</div></div>
+        <div class="skills" ${status === 'absent' ? 'hidden' : ''}><div class="skills-grid">${skillsOf().map(skill).join('')}</div></div>
         <div class="pskills" hidden></div>
       </div>`;
   }

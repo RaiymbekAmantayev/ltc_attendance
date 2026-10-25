@@ -72,7 +72,7 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
   const group = await lessons.groupForTeacher(teacher, groupId, date);
   if (!group) throw new AppError(403, 'forbidden');
 
-  const roster = new Set((await hollihop.students(groupId)).map(s => s.id));
+  const roster = new Map((await hollihop.students(groupId)).map(s => [s.id, s.name]));
   const unique = [...new Map(students.map(s => [String(s.id), s])).values()];
   const cleanTopic = String(topic || '').trim().slice(0, 500);
   const personal = pickPersonal(personalRaw);
@@ -81,13 +81,14 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
   const payload = {
     topic: cleanTopic,
     ktpTopicId: ktpTopic ? ktpTopic.id : null,
+    level: group.level || '',                                              // для выгрузки тестов по уровням
     testTypeId: exports.testTypeFor(teacher),
     dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
     personal: personal && {
       categoryId: personal.category.id, testTypeId: personal.type.id,
       dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
     },
-    students: unique.map(s => normalizeStudent(s, roster, exports.testTypeFor(teacher), cleanTopic, personal)),
+    students: unique.map(s => ({ ...normalizeStudent(s, roster, exports.testTypeFor(teacher), cleanTopic, personal), name: roster.get(String(s.id)) || null })),   // ФИО — для выгрузки
   };
   if (personal && !payload.students.some(s => s.personalSkills)) throw new AppError(422, 'personal_empty');
 

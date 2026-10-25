@@ -86,3 +86,37 @@ test('выгрузка: период проверяется, неизвестн�
   assert.equal((await get(`/admin-api/export/schedule?from=${SUN}&to=${MON}`)).status, 400);
   assert.equal((await get(`/admin-api/export/other?from=${MON}&to=${SUN}`)).status, 404);
 });
+
+test('тесты учеников: доп. тест по навыкам с % и сводкой по уровням, средние Daily test; ФИО старых отметок — из HollyHop', async () => {
+  const roster = (await api.request('GET', `/api/groups/9003/students?date=${h.WED}`, { tg: 6001 })).json.students;
+  const full = { 1: 10, 2: 15, 3: 40, 4: 40, 5: 20, 6: 15, 7: 10, 21: 2 };              // максимум Progress Test — 152
+  const weak = { 1: 0, 2: 5, 3: 20, 4: 20, 5: 10, 6: 5, 7: 5, 21: 1 };                 // 66 из 152
+  const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9003', date: h.WED, topic: '',
+    personal: { categoryId: 1, testTypeId: 1 },
+    students: roster.map((s, i) => ({ id: s.id, status: 'present', skills: { 13: 5, 9: 4, 10: 3 }, personalSkills: i ? weak : full })) } });
+  assert.equal(saved.json.status, 'done');
+  // Старая отметка — без ФИО и уровня в payload.
+  await h.db.query(`INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, lesson_date, slot, payload, progress, status)
+    VALUES (?,?,?,?,?,?,?,?,?)`, [h.uuid(), foreign, '9002', 'English Pre-Intermediate B1', h.WED, 1,
+    JSON.stringify({ topic: '', testTypeId: 131, students: [{ id: '900201', status: 'present', skills: { 8: 45, 11: 4, 9: 4, 10: 4 } }] }), '[]', 'done']);
+
+  const rep = (await get(`/admin-api/export/tests?from=${MON}&to=${SUN}`)).json;
+  const progress = rep.sheets.find(s => s.key === 'p1');
+  assert.equal(progress.name, 'Progress Test');
+  assert.deepEqual(progress.rows.map(r => [r.student, r.level, r.total, r.max, r.pct]),
+    [[roster[0].name, 'Upper Intermediate', 152, 152, 1], [roster[1].name, 'Upper Intermediate', 66, 152, 0.4342]].sort((a, b) => a[0].localeCompare(b[0], 'ru')));
+  assert.deepEqual(rep.summary, [{ key: 'p1', name: 'Progress Test', levels: [{ level: 'Upper Intermediate', count: 2, good: 1, mid: 0, bad: 1 }] }]);
+
+  const daily = rep.sheets.find(s => s.key === 'daily');
+  const old = daily.rows.find(r => r.group === 'English Pre-Intermediate B1');
+  assert.deepEqual([old.student, old.level, old.scores, old.pct], ['Аян Сериков', 'Pre-Intermediate', { hw: 4, eng: 4, disc: 4 }, 0.8]);
+  assert.ok(daily.rows.some(r => r.group === 'IELTS Intensive' && r.lessons === 1 && r.total === 12));
+  assert.equal((await get('/admin-api/export/tests?from=2026-01-01&to=2026-05-01')).status, 200);   // тестам — период до года
+
+  const files = unzip(Buffer.from(await (await fetch(`${api.base}/admin-api/export/tests?from=${MON}&to=${SUN}&format=xlsx`,
+    { headers: { authorization: 'Basic ' + Buffer.from('admin:secret').toString('base64') } })).arrayBuffer()));
+  assert.match(files['xl/workbook.xml'], /name="Отчет".*name="Progress Test".*name="Daily test"/);
+  assert.match(files['xl/worksheets/sheet1.xml'], /Количество сдавших.*Upper Intermediate.*<f>SUM\(B\d+:B\d+\)<\/f>/s);
+  assert.match(files['xl/worksheets/sheet2.xml'], /Listening.*Результат теста, %/s);
+  assert.match(files['xl/worksheets/sheet2.xml'], /s="6"><v>1<\/v>/);                    // 100% — зелёный
+});
