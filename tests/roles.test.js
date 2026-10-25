@@ -1,6 +1,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./helpers');
+const { todayIso } = require('../src/lib/date');
 
 let api, t1;
 const TG = { teacher: 2001, coord: 2002, director: 999 };
@@ -59,7 +60,7 @@ test('обзор и группы: структура данных', async () => 
 test('координатор назначает замену из мини-аппа', async () => {
   const { json: staff } = await api.request('GET', '/api/dash/staff', { tg: TG.coord });
   assert.ok(staff.find(s => s.id === t1));
-  const add = await api.request('POST', '/api/dash/substitutions', { tg: TG.coord, body: { group_id: '9002', lesson_date: h.WED, substitute_id: t1 } });
+  const add = await api.request('POST', '/api/dash/substitutions', { tg: TG.coord, body: { group_id: '9002', lesson_date: todayIso(), substitute_id: t1 } });   // список — замены за последние 7 дней, поэтому не фиксированная дата
   assert.equal(add.status, 200);
   const list = (await api.request('GET', '/api/dash/substitutions', { tg: TG.coord })).json;
   assert.ok(list.find(s => s.group_id === '9002'));
