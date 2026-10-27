@@ -227,7 +227,9 @@
   }
   /** Выбран занятый преподаватель — ошибка под списком, кнопка «Назначить» недоступна. */
   function paintBusy() {
-    const box = $('#s-busy'), list = busy[$('#s-teacher').value];
+    const box = $('#s-busy'), select = $('#s-teacher');
+    if (!box || !select) return;   // ушли с вкладки, пока ждали ответ
+    const list = busy[select.value];
     box.hidden = !list;
     box.textContent = list ? `Нельзя выбрать этого преподавателя: на это время есть занятие (${busyText(list)})` : '';
     $('[data-act="add-sub"]').disabled = !!list;
