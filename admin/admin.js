@@ -140,7 +140,7 @@
         <button class="btn ghost" data-act="import">Подтянуть из HollyHop</button>
         <input type="search" id="tsearch" placeholder="Поиск по ФИО" value="${esc(state.q)}">
         <select id="trole"><option value="">Все роли</option>${Object.entries(ROLE).map(([k, v]) => `<option value="${k}" ${state.roleFilter === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <button class="btn ghost sm" data-act="csv-teachers" style="margin-left:auto">📥 CSV</button>
+        <button class="btn ghost sm" data-act="xlsx-teachers" style="margin-left:auto">📥 Excel</button>
       </div>
       <p class="note">Без Telegram ID вход невозможен. Неактивные скрыты от приложения. Директору и координатору HollyHop ID не нужен — они видят разделы руководства.</p>
       <div class="card"><div class="tscroll"><table id="ttable"></table></div></div>`;
@@ -148,8 +148,9 @@
   };
   on(root, 'input', '#tsearch', el => { state.q = el.value; paintTeachers(); });
   on(root, 'change', '#trole', el => { state.roleFilter = el.value; paintTeachers(); });
-  on(root, 'click', '[data-act="csv-teachers"]', () => LTC.csv('LTC_staff.csv', ['ФИО', 'Роль', 'Telegram ID', 'HollyHop ID', 'Филиал', 'Язык', 'Активен'],
-    teacherRows().map(t => [t.full_name, ROLE[t.role], t.telegram_id, t.hollihop_id, t.branch, t.lang, t.active ? 'да' : 'нет'])));
+  // ID — строкой, чтобы Excel не превращал длинные Telegram ID в 1,23E+09
+  on(root, 'click', '[data-act="xlsx-teachers"]', () => LTC.xlsx('LTC_staff.xlsx', ['ФИО', 'Роль', 'Telegram ID', 'HollyHop ID', 'Филиал', 'Язык', 'Активен'],
+    teacherRows().map(t => [t.full_name, ROLE[t.role], t.telegram_id == null ? '' : String(t.telegram_id), t.hollihop_id == null ? '' : String(t.hollihop_id), t.branch, t.lang === 'en' ? 'EN' : 'RU', t.active ? 'да' : 'нет']), 'Сотрудники'));
 
   const teacherForm = t => `
     <div class="form-grid">
