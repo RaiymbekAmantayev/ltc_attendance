@@ -47,6 +47,14 @@ test('иностранному преподавателю ФИО ученико�
   assert.equal(roster[0].name, 'Ayan Serikov');
 });
 
+test('в составе группы только актуальные ученики: без BeginDate и с прошедшей EndDate не показываются', async () => {
+  const roster = await students('9001');
+  assert.equal(roster.length, 6);                                // StudentsCount 9001 — выбывший и незачисленный отброшены
+  assert.ok(!roster.some(s => ['900198', '900199'].includes(s.id)));
+  const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
+  assert.equal(lessons.find(g => g.id === '9001').students, 6);   // в карточке занятия — тоже только актуальные
+});
+
 test('сохранение пишет посещаемость в HollyHop; повтор того же нажатия не дублирует', async () => {
   const list = (await students('9001')).map((s, i) => ({ id: s.id, status: i === 0 ? 'absent' : 'present', skills: i === 0 ? null : { 13: '5', 9: '4', 10: '4' }, comment: 'не используется' }));
   const key = h.uuid();

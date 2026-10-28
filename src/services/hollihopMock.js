@@ -50,8 +50,11 @@ async function respond(method, payload) {
       const unit = EDUNITS.find(u => String(u.Id) === String(payload.edUnitId));
       const count = unit ? unit.StudentsCount : 0;
       const rows = Array.from({ length: count }, (_, i) => ({
-        StudentClientId: unit.Id * 100 + i + 1, StudentName: STUDENT_NAMES[i % STUDENT_NAMES.length],
+        StudentClientId: unit.Id * 100 + i + 1, StudentName: STUDENT_NAMES[i % STUDENT_NAMES.length], BeginDate: '2024-09-01',
       }));
+      // Выбывший и ещё не зачисленный (без BeginDate) — в состав группы попасть не должны.
+      if (unit) rows.push({ StudentClientId: unit.Id * 100 + 98, StudentName: 'Выбывший Ученик', BeginDate: '2024-09-01', EndDate: '2025-01-15' },
+        { StudentClientId: unit.Id * 100 + 99, StudentName: 'Без Даты Начала' });
       return ok({ EdUnitStudents: rows });
     }
     case 'GetTeachers':

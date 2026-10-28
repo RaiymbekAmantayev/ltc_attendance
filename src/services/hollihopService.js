@@ -2,7 +2,7 @@
 // Из эталонного коннектора LTC: повторы с экспоненциальной паузой и jitter, уважение Retry-After,
 // таймаут, ограничение частоты (лимит HollyHop ≈ 600 запросов / 30 с), типизированные ошибки.
 const { hollihop } = require('../config/env');
-const { weekdayBit, addDays } = require('../lib/date');
+const { weekdayBit, addDays, todayIso } = require('../lib/date');
 const mock = require('./hollihopMock');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
@@ -226,10 +226,24 @@ exports.groupById = id => cached(`gi:${id}`, async () => {
   return EdUnits[0] ? toGroup(EdUnits[0]) : null;
 });
 
-exports.students = groupId => cached(`st:${groupId}`, async () => {
+/** Актуальный ученик: связка началась (BeginDate есть), а EndDate нет или она ещё не прошла. */
+const isCurrent = (s, today) => !!s.beginDate && (!s.endDate || String(s.endDate).slice(0, 10) >= today);
+
+const allStudents = groupId => cached(`st:${groupId}`, async () => {
   const { EdUnitStudents = [] } = await call('GetEdUnitStudents', { edUnitId: groupId, statuses: 'Normal,WorkingOff' });
-  return EdUnitStudents.map(s => ({ id: String(s.StudentClientId), name: s.StudentName }));
+  return EdUnitStudents.map(s => ({ id: String(s.StudentClientId), name: s.StudentName, beginDate: s.BeginDate, endDate: s.EndDate }));
 });
+
+const pickName = ({ id, name }) => ({ id, name });
+
+/** Актуальный состав группы — для отметки занятия и карточки группы. */
+exports.students = async groupId => {
+  const today = todayIso();
+  return (await allStudents(groupId)).filter(s => isCurrent(s, today)).map(pickName);
+};
+
+/** Все ученики группы, включая выбывших, — чтобы в отчётах по старым отметкам не терялись ФИО. */
+exports.allStudents = async groupId => (await allStudents(groupId)).map(pickName);
 
 exports.teachers = async () => {
   const { Teachers = [] } = await call('GetTeachers', { take: 10000 });

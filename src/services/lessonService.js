@@ -30,9 +30,13 @@ const startMinutes = time => {
 /** Занятия дня по порядку — с утра до вечера. */
 exports.lessonsWithStatus = async (teacher, date) => {
   const groups = (await groupsForTeacher(teacher, date)).sort((a, b) => startMinutes(a.time) - startMinutes(b.time));
-  const summary = await Submission.summaryByGroup(date, groups.map(g => g.id), teacher.id);
-  return groups.map(({ hasLessonOnDate, teacherId, ...g }) => {
+  const [summary, counts] = await Promise.all([
+    Submission.summaryByGroup(date, groups.map(g => g.id), teacher.id),
+    // Число актуальных учеников; не достали состав — остаётся StudentsCount из HollyHop.
+    Promise.all(groups.map(g => hollihop.students(g.id).then(list => list.length, () => g.students))),
+  ]);
+  return groups.map(({ hasLessonOnDate, teacherId, ...g }, i) => {
     const s = summary[g.id];
-    return { ...g, status: s?.status || 'none', done: s?.done ?? 0, total: s?.total ?? 0 };
+    return { ...g, students: counts[i], status: s?.status || 'none', done: s?.done ?? 0, total: s?.total ?? 0 };
   });
 };

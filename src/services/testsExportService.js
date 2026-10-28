@@ -24,7 +24,7 @@ async function lookupGroups(rows, { names, levels: groupLevels }) {
     .filter(id => !names.has(id));
   for (let i = 0; i < need.length; i += HH_CONCURRENCY) {
     await Promise.all(need.slice(i, i + HH_CONCURRENCY).map(async id => {
-      const [students, group] = await Promise.all([hollihop.students(id).catch(() => []), hollihop.groupById(id).catch(() => null)]);
+      const [students, group] = await Promise.all([hollihop.allStudents(id).catch(() => []), hollihop.groupById(id).catch(() => null)]);
       names.set(id, new Map(students.map(s => [s.id, s.name])));
       groupLevels.set(id, group?.level || '');
     }));
