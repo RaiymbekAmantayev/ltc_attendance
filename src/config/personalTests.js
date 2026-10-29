@@ -18,7 +18,8 @@ module.exports = {
     { id: 1, name: 'Progress Test', types: [
       { id: 1, name: 'Progress Test', skills: [...FULL, k(21, 'Attendance', 2)] }] },
     { id: 4, name: 'Final Test', types: [
-      { id: 1, name: 'Final Test', skills: FULL }] },               // testTypeId 1 — как у Progress Test (по данным Учебного отдела)
+      // Тест «Общий» — testTypeId 4. Раньше по ошибке слали 1 (это Progress Test, требует Attendance) — старые отметки читаются по legacyIds.
+      { id: 4, legacyIds: [1], name: 'Final Test', skills: FULL }] },
     { id: 6, name: 'Entry test', types: [
       { id: 111, name: 'Elementary', skills: ENTRY },
       { id: 13, name: 'Pre-Intermediate', skills: ENTRY },
@@ -36,10 +37,11 @@ module.exports = {
       ({ id: 137 + i, name: `File ${i + 1}`, skills: NEF })) },
   ],
 
-  /** Тип теста категории или null, если такой пары нет. */
+  /** Тип теста категории (в т.ч. по прежнему id из legacyIds) или null, если такой пары нет. */
   find(categoryId, testTypeId) {
+    const id = Number(testTypeId);
     const category = this.categories.find(c => c.id === Number(categoryId));
-    const type = category && category.types.find(t => t.id === Number(testTypeId));
+    const type = category && category.types.find(t => t.id === id || (t.legacyIds || []).includes(id));
     return type ? { category, type } : null;
   },
 };

@@ -42,6 +42,17 @@ test('Progress Test пишется тем, кому введены баллы; �
   assert.equal(card.total, 7); assert.equal(card.done, 7);                    // тема + 3 посещаемости + 2 ежедневных + 1 доп.
 });
 
+test('Final Test пишется с типом 4 («Общий») без Attendance; старый тип 1 из очереди тоже уходит как 4', async () => {
+  const FINAL = { 1: 7, 2: 15, 3: 31, 4: 35, 5: 15, 6: 15, 7: 10 };
+  for (const testTypeId of [4, 1]) {
+    await h.db.query('DELETE FROM submissions'); h.mock.reset();
+    const res = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: FINAL }], { categoryId: 4, testTypeId });
+    assert.equal(res.json.status, 'done', JSON.stringify(res.json));
+    assert.equal(h.mock.state.personal[0].testTypeId, 4);
+    assert.deepEqual(h.mock.state.personal[0].skills, [1, 2, 3, 4, 5, 6, 7].map(id => ({ skillId: id, score: FINAL[id] })));
+  }
+});
+
 test('Entry test и Revise&Check: нужен тип; навыки — по типу', async () => {
   assert.equal((await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: 20 } }], { categoryId: 6 })).json.error, 'bad_personal_test');
   assert.equal((await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 3: 20, 4: 20 } }], { categoryId: 6, testTypeId: 999 })).json.error, 'bad_personal_test');
@@ -57,7 +68,7 @@ test('Entry test и Revise&Check: нужен тип; навыки — по ти�
 });
 
 test('валидация доп. теста: неполный набор, выше максимума, выбран без баллов', async () => {
-  const one = (personalSkills, personal = { categoryId: 4, testTypeId: 1 }) => save([{ id: '3101', status: 'present', skills: DAILY, personalSkills }], personal);
+  const one = (personalSkills, personal = { categoryId: 4, testTypeId: 4 }) => save([{ id: '3101', status: 'present', skills: DAILY, personalSkills }], personal);
   const partial = await one({ 1: 5 });
   assert.equal(partial.json.error, 'test_incomplete'); assert.equal(partial.json.test, 'personal');
   const over = await one({ 1: 11, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1 });

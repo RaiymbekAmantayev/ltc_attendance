@@ -26,6 +26,9 @@ const STUDENT_NAMES = ['Аян Сериков', 'Мира Ахметова', 'Т
 EDUNITS.push({ Id: 31, Name: 'TEST · Sandbox group', OfficeOrCompanyName: 'Абая', StudentsCount: 3, Vacancies: 5, Level: 'Test', Discipline: 'English', ScheduleItems: [item(127, '09:00', '10:00', 101)] });
 const SKILLS_BY_TYPE = { 131: { 8: 45, 9: 5, 10: 5, 11: 5 }, 132: { 8: 45, 9: 5, 10: 5, 13: 5 } };   // набор навыков и максимумы каждого типа теста
 const TEST_TYPES = [131, 132];
+// Персональные типы 1 (Progress Test) и 4 (Final Test «Общий»): без любого из навыков HollyHop отвечает 500 «The skill "…" is not specified».
+const FULL_SKILLS = { 1: 'listening', 2: 'reading', 3: 'grammar', 4: 'vocabulary', 5: 'pronunciation', 6: 'speaking', 7: 'writing' };
+const PERSONAL_SKILLS_BY_TYPE = { 1: { ...FULL_SKILLS, 21: 'attendance' }, 4: FULL_SKILLS };
 
 const state = { writes: [], tests: [], personal: [], failures: [] };
 
@@ -87,6 +90,11 @@ async function respond(method, payload) {
         return { status: 400, body: { Error: 'Набор навыков не соответствует типу теста' } };
       }
       if (SKILLS && payload.skills.some(k => k.score > SKILLS[k.skillId])) return { status: 400, body: { Error: 'Баллы превышают максимум' } };
+      const PERSONAL = PERSONAL_SKILLS_BY_TYPE[payload.testTypeId];
+      if (PERSONAL) {
+        const missing = Object.keys(PERSONAL).find(id => !payload.skills.some(k => String(k.skillId) === id));
+        if (missing) return { status: 500, body: { Error: `The skill "${PERSONAL[missing]}" is not specified` } };
+      }
       (SKILLS ? state.tests : state.personal).push(payload);         // ежедневный тест (131/132) — в tests, доп. тест — в personal
       return ok({ Success: true });
     }
