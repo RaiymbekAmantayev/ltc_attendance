@@ -256,7 +256,7 @@
         <input type="date" id="m-from" value="${f.from}"><span class="mut">—</span><input type="date" id="m-to" value="${f.to}">
         <select id="m-status"><option value="">Все статусы</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${esc(v[1])}</option>`).join('')}</select>
         <span class="mut">${submissions.length} записей</span>
-        <button class="btn ghost sm" data-act="csv-subm" style="margin-left:auto">📥 CSV</button>
+        <button class="btn ghost sm" data-act="xlsx-subm" style="margin-left:auto">📥 Excel</button>
       </div>
       <div class="card"><div class="tscroll"><table><tr><th>Занятие</th><th class="left">Группа</th><th class="left">Автор</th><th class="left">Статус</th><th class="left">Данные</th><th></th></tr>
         ${submissions.map((x, i) => { const p = parse(x.payload); return `<tr><td>${esc(x.lesson_date)}</td>
@@ -287,8 +287,19 @@
       .then(ids => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = ids[el.dataset.hhId] ?? '—'; }))
       .catch(() => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = '—'; }));
   });
-  on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
-    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));
+  on(root, 'click', '[data-act="xlsx-subm"]', async el => {
+    // Id учеников HollyHop по ClientId — пачками (endpoint принимает до 300 за раз); не получилось — колонка пустая.
+    const clientIds = [...new Set(submissions.flatMap(x => parse(x.payload).students.map(s => String(s.id))))];
+    const ids = {};
+    el.disabled = true;
+    try {
+      for (let i = 0; i < clientIds.length; i += 300) Object.assign(ids, await api('/student-ids?clientIds=' + clientIds.slice(i, i + 300).join(',')));
+    } catch { LTC.toast('Id учеников из HollyHop не получены — в Excel будет только ClientId', 'bad'); }
+    el.disabled = false;
+    // ID — строкой, как в выгрузке сотрудников; баллы — числами
+    LTC.xlsx('LTC_submissions.xlsx', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Ученик ClientId', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, String(x.group_id), x.group_name, x.full_name, x.status, p.topic, ids[s.id] ?? '', String(s.id), s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); }), 'Отметки');
+  });
 
   /* ---------- Выгрузка: расписание (HollyHop), фактические отметки по дням, тесты учеников ---------- */
   /** Расчётный период по умолчанию: с 21-го числа по 20-е следующего месяца. */
