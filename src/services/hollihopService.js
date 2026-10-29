@@ -245,6 +245,24 @@ exports.students = async groupId => {
 /** Все ученики группы, включая выбывших, — чтобы в отчётах по старым отметкам не терялись ФИО. */
 exports.allStudents = async groupId => (await allStudents(groupId)).map(pickName);
 
+/**
+ * Id ученика в HollyHop по ClientId (GetEdUnitStudents отдаёт только StudentClientId) — для показа в админке.
+ * Запись в HollyHop идёт по ClientId; Id не меняется, поэтому кэш долгий. Не нашли — null.
+ */
+const studentIdCache = new Map();
+exports.studentIds = async clientIds => {
+  const out = {};
+  for (const clientId of [...new Set(clientIds.map(String))]) {
+    if (!studentIdCache.has(clientId)) {
+      const { Students = [] } = await call('GetStudents', { clientId: Number(clientId) });
+      const found = Students.find(s => String(s.ClientId) === clientId) || Students[0];
+      if (found?.Id != null) studentIdCache.set(clientId, String(found.Id));
+    }
+    out[clientId] = studentIdCache.get(clientId) ?? null;
+  }
+  return out;
+};
+
 exports.teachers = async () => {
   const { Teachers = [] } = await call('GetTeachers', { take: 10000 });
   return Teachers.filter(t => !t.Fired).map(t => ({

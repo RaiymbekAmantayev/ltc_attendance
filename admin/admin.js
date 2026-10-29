@@ -280,8 +280,12 @@
       <div class="mrow"><span class="k">Шагов записано</span><span class="v">${pr.length}</span></div>
       <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
       <div class="msec-title">Ученики (ID HollyHop)</div>
-      <div class="tscroll"><table><tr><th>ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
-      ${p.students.map(s => `<tr><td>${esc(s.id)}</td><td class="left">${label[s.status]}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+      <div class="tscroll"><table><tr><th class="left">ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
+      ${p.students.map(s => `<tr><td class="left"><span data-hh-id="${esc(s.id)}">…</span><br><span class="mut">ClientId ${esc(s.id)}</span></td><td class="left">${label[s.status]}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+    // В отметке хранится ClientId (по нему идёт запись в HollyHop); Id ученика подтягиваем отдельно.
+    api('/student-ids?clientIds=' + p.students.map(s => s.id).join(','))
+      .then(ids => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = ids[el.dataset.hhId] ?? '—'; }))
+      .catch(() => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = '—'; }));
   });
   on(root, 'click', '[data-act="csv-subm"]', () => LTC.csv('LTC_submissions.csv', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
     submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, x.group_id, x.group_name, x.full_name, x.status, p.topic, s.id, s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); })));

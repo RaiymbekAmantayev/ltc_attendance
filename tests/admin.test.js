@@ -29,6 +29,13 @@ test('CRUD преподавателей, роли и валидация', async 
   assert.ok(audit.length >= 2 && audit.every(a => a.actor === 'admin'));
 });
 
+test('Id учеников HollyHop по ClientId для карточки отметки', async () => {
+  const r = await api.request('GET', '/admin-api/student-ids?clientIds=3511,3101', { admin: true });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json, { 3511: '503511', 3101: '503101' });                                // в демо Id = ClientId + 500000
+  assert.equal((await api.request('GET', '/admin-api/student-ids?clientIds=abc', { admin: true })).status, 400);
+});
+
 test('заголовки безопасности и healthcheck', async () => {
   const r = await api.request('GET', '/healthz');
   assert.equal(r.json.ok, 1);

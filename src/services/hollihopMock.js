@@ -59,6 +59,8 @@ async function respond(method, payload) {
     }
     case 'GetTeachers':
       return ok({ Teachers: TEACHERS });
+    case 'GetStudents':                                          // Id ученика ≠ ClientId: в демо Id = ClientId + 500000
+      return ok({ Students: payload.clientId ? [{ Id: Number(payload.clientId) + 500000, ClientId: Number(payload.clientId) }] : [] });
     case 'SetStudentPasses':
       state.writes.push(...(Array.isArray(payload) ? payload : [payload]));
       return ok({ Success: true });

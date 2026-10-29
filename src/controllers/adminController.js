@@ -107,5 +107,12 @@ exports.listSubmissions = async (req, res) => res.json(await Submission.list({
   status: ['pending', 'partial', 'attention', 'done'].includes(req.query.status) ? req.query.status : null,
 }));
 
+/** Id учеников в HollyHop по ClientId (?clientIds=1,2,3) — для карточки отметки. */
+exports.studentIds = async (req, res) => {
+  const ids = String(req.query.clientIds || '').split(',').filter(id => /^\d+$/.test(id));
+  if (!ids.length || ids.length > 300) throw new AppError(400, 'bad_request');
+  res.json(await hollihop.studentIds(ids));
+};
+
 exports.retrySubmission = async (req, res) => res.json(await submissions.retry(req.params.key, ACTOR));
 exports.listAudit = async (req, res) => res.json(await Audit.latest({ action: req.query.action || null }));

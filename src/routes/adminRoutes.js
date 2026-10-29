@@ -28,6 +28,7 @@ router.delete(API + '/substitutions/:id', c.removeSubstitution);
 
 router.get(API + '/submissions', c.listSubmissions);
 router.get(API + '/export/:kind', c.exportReport);
+router.get(API + '/student-ids', c.studentIds);
 router.post(API + '/submissions/:key/retry', c.retrySubmission);
 router.get(API + '/audit', c.listAudit);
 
