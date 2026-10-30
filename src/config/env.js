@@ -31,7 +31,7 @@ module.exports = {
   directorTelegramIds: list('DIRECTOR_TG_IDS'),
   rules: {
     testRequired: true,                                                // ежедневный тест обязателен всегда (TEST_REQUIRED больше не читается)
-    commentRequired: flag('COMMENT_REQUIRED'),
+    commentRequired: true,                                             // тема урока обязательна всегда (COMMENT_REQUIRED больше не читается)
     commentMaxLen: num('COMMENT_MAX_LEN', 500),
   },
   lowFillThreshold: num('LOW_FILL_THRESHOLD', 3),

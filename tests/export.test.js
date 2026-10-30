@@ -56,7 +56,7 @@ test('дни занятий из HollyHop (queryDays) важнее строк р
 
 test('фактические отметки: кто отметил — по дням; Excel с двумя строками шапки и формулами', async () => {
   const roster = (await api.request('GET', `/api/groups/9001/students?date=${h.WED}`, { tg: 6001 })).json.students;
-  const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9001', date: h.WED, topic: '',
+  const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9001', date: h.WED, topic: 'Unit 1',
     students: roster.map(s => ({ id: s.id, status: 'present', skills: { 13: 5, 9: 5, 10: 5 } })) } });
   assert.equal(saved.json.status, 'done');
   const rep = (await get(`/admin-api/export/submissions?from=${MON}&to=${SUN}`)).json;
@@ -91,7 +91,7 @@ test('тесты учеников: доп. тест по навыкам с % и 
   const roster = (await api.request('GET', `/api/groups/9003/students?date=${h.WED}`, { tg: 6001 })).json.students;
   const full = { 1: 10, 2: 15, 3: 40, 4: 40, 5: 20, 6: 15, 7: 10, 21: 2 };              // максимум Progress Test — 152
   const weak = { 1: 0, 2: 5, 3: 20, 4: 20, 5: 10, 6: 5, 7: 5, 21: 1 };                 // 66 из 152
-  const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9003', date: h.WED, topic: '',
+  const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9003', date: h.WED, topic: 'Unit 1',
     personal: { categoryId: 1, testTypeId: 1 },
     students: roster.map((s, i) => ({ id: s.id, status: 'present', skills: { 13: 5, 9: 4, 10: 3 }, personalSkills: i ? weak : full })) } });
   assert.equal(saved.json.status, 'done');

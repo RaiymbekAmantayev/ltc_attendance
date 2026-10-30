@@ -15,7 +15,7 @@ before(async () => {
 after(() => api.close());
 beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissions'); await h.db.query('DELETE FROM substitutions'); });
 
-const save = (tg, group, list, topic = '') => api.request('POST', '/api/lessons', { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, students: list } });
+const save = (tg, group, list, topic = 'Unit 1') => api.request('POST', '/api/lessons', { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, students: list } });
 
 test('тестовая группа 31: тип 132 для местного, навык 8 всегда 45, «опоздал» → «был»', async () => {
   const me = (await api.request('GET', '/api/me', { tg: TG.ru })).json;
@@ -32,7 +32,7 @@ test('тестовая группа 31: тип 132 для местного, на
   assert.equal(h.mock.state.writes.length, 3, 'посещаемость — всем');
   assert.equal(h.mock.state.tests.length, 2, 'тест — только присутствовавшим');
   assert.deepEqual(h.mock.state.tests[0], { studentClientId: 3101, dateTime: `${h.WED}T09:00:00`, discipline: 'Английский', teacherId: 101, testTypeId: 132,
-    skills: [{ skillId: 8, score: 45 }, { skillId: 13, score: 4 }, { skillId: 9, score: 5 }, { skillId: 10, score: 5 }], commentHtml: '' });
+    skills: [{ skillId: 8, score: 45 }, { skillId: 13, score: 4 }, { skillId: 9, score: 5 }, { skillId: 10, score: 5 }], commentHtml: 'Unit 1' });
   assert.deepEqual(h.mock.state.tests[1].skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 3.5 }, { skillId: 9, score: 2 }, { skillId: 10, score: 2 }]);
 });
 
@@ -68,17 +68,19 @@ test('сбой теста → «частично», досылка не дубл
   for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502 });
   const key = h.uuid();
   const list = [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }, { id: '3102', status: 'present', skills: { 13: 4, 9: 4, 10: 4 } }];
-  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: '', students: list } });
+  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', students: list } });
   assert.equal(res.json.status, 'partial');
   assert.equal(h.mock.state.writes.length, 2);
   assert.equal(h.mock.state.tests.length, 1);
   const card = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.ru })).json.find(g => g.id === '31');
-  assert.equal(card.total, 4); assert.equal(card.done, 3);                              // записано 3 из 4
+  assert.equal(card.total, 7); assert.equal(card.done, 5);                              // тема + 2 посещ. + 2 теста + 2 коина; записано 5 из 7
+  assert.deepEqual(h.mock.state.coins, { 3102: '16' }, 'коины — только тому, чей тест записан');
 
   assert.equal((await require('../src/services/submissionService').push(key)).status, 'done');
   assert.equal(h.mock.state.writes.length, 2);
   assert.equal(h.mock.state.tests.length, 2);
   assert.deepEqual(h.mock.state.tests.map(t => t.studentClientId).sort(), [3101, 3102]);
+  assert.deepEqual(h.mock.state.coins, { 3101: '20', 3102: '16' }, 'досылка начислила коины 3101 и не задвоила 3102');
 });
 
 test('HollyHop отклонил тест (400) → «нужно внимание» без бесконечных повторов', async () => {

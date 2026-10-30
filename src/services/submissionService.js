@@ -6,6 +6,7 @@ const { AppError } = require('../middleware/errorHandler');
 const { rules } = require('../config/env');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
+const coins = require('../config/coins');
 const Ktp = require('../models/ktpModel');
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -83,6 +84,7 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
     ktpTopicId: ktpTopic ? ktpTopic.id : null,
     level: group.level || '',                                              // для выгрузки тестов по уровням
     testTypeId: exports.testTypeFor(teacher),
+    coins: true,                                                           // начислять коины (старые отметки — без них)
     dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,
     personal: personal && {
       categoryId: personal.category.id, testTypeId: personal.type.id,
@@ -142,11 +144,16 @@ exports.push = async key => {
       steps.push([`a:${s.id}`, () => hollihop.writeAttendance(groupId, date, s)]);
       if (s.skills && hollihop.testEnabledFor(groupId)) steps.push([`r:${s.id}`, () => hollihop.writeReport(groupId, date, s, payload)]);
       if (s.personalSkills && payload.personal && hollihop.testEnabledFor(groupId)) steps.push([`p:${s.id}`, () => hollihop.writePersonalTest(s, payload)]);
+      // Коины — последним шагом ученика и только после записи его тестов; после успеха не повторяется, поэтому дважды не начисляются.
+      const earned = payload.coins && hollihop.testEnabledFor(groupId) ? coins.forStudent(s, payload) : 0;
+      const tests = steps.map(([k]) => k).filter(k => k === `r:${s.id}` || k === `p:${s.id}`);
+      if (earned > 0) steps.push([`c:${s.id}`, () => hollihop.addCoins(s.id, earned), tests]);
     }
 
     let status = 'done', lastError = null, fatal = false;
-    for (const [stepKey, run] of steps) {
+    for (const [stepKey, run, after = []] of steps) {
       if (done.has(stepKey)) continue;
+      if (after.some(k => !done.has(k))) { status = 'partial'; continue; }   // тест ученика не записался — коины при досылке
       try {
         await run();
         done.add(stepKey);

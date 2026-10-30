@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const coins = require('../config/coins');
 
 exports.parse = v => (typeof v === 'string' ? JSON.parse(v) : v);
 
@@ -34,7 +35,10 @@ exports.summaryByGroup = async (date, groupIds, teacherId) => {
 exports.progressOf = row => {
   const payload = exports.parse(row.payload), progress = exports.parse(row.progress) || [];
   let total = payload.topic ? 1 : 0;
-  for (const s of payload.students) total += 1 + (s.skills ? 1 : 0) + (s.personalSkills && payload.personal ? 1 : 0);
+  for (const s of payload.students) {
+    total += 1 + (s.skills ? 1 : 0) + (s.personalSkills && payload.personal ? 1 : 0);
+    if (payload.coins && coins.forStudent(s, payload) > 0) total += 1;   // отметки до появления коинов — без этого шага
+  }
   return { total, done: Math.min(progress.length, total) };
 };
 

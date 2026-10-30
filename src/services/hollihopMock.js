@@ -30,11 +30,11 @@ const TEST_TYPES = [131, 132];
 const FULL_SKILLS = { 1: 'listening', 2: 'reading', 3: 'grammar', 4: 'vocabulary', 5: 'pronunciation', 6: 'speaking', 7: 'writing' };
 const PERSONAL_SKILLS_BY_TYPE = { 1: { ...FULL_SKILLS, 21: 'attendance' }, 4: FULL_SKILLS };
 
-const state = { writes: [], tests: [], personal: [], failures: [] };
+const state = { writes: [], tests: [], personal: [], failures: [], coins: {}, extraFields: {}, coinWrites: [] };   // coins: ClientId → «Коины»; extraFields: ClientId → прочие поля
 
 /** Для тестов: следующий вызов метода завершится ошибкой {status, body}; when(payload) — только подходящий вызов. */
 const failNext = (method, failure) => state.failures.push({ method, ...failure });
-const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; };
+const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; state.coins = {}; state.extraFields = {}; state.coinWrites = []; };
 
 const ok = body => ({ status: 200, body });
 
@@ -63,7 +63,21 @@ async function respond(method, payload) {
     case 'GetTeachers':
       return ok({ Teachers: TEACHERS });
     case 'GetStudents':                                          // Id ученика ≠ ClientId: в демо Id = ClientId + 500000
-      return ok({ Students: payload.clientId ? [{ Id: Number(payload.clientId) + 500000, ClientId: Number(payload.clientId) }] : [] });
+      return ok({ Students: payload.clientId ? [{ Id: Number(payload.clientId) + 500000, ClientId: Number(payload.clientId),
+        ExtraFields: [...Object.entries(state.extraFields[payload.clientId] || {}).map(([Name, Value]) => ({ Name, Value })),
+          ...(state.coins[payload.clientId] != null ? [{ Name: 'Коины', Value: String(state.coins[payload.clientId]) }] : [])] }] : [] });
+    case 'EditUserExtraFields': {
+      if (!payload.studentClientId || !Array.isArray(payload.fields) || !payload.fields.length) return { status: 400, body: { Error: 'Не заполнены обязательные поля' } };
+      // Как HollyHop: присланный набор полей заменяет весь прежний — не присланные поля стираются.
+      delete state.coins[payload.studentClientId];
+      state.extraFields[payload.studentClientId] = {};
+      for (const f of payload.fields) {
+        if (f.name === 'Коины') state.coins[payload.studentClientId] = f.value;
+        else state.extraFields[payload.studentClientId][f.name] = f.value;
+      }
+      state.coinWrites.push(payload);
+      return ok({ Success: true });
+    }
     case 'SetStudentPasses':
       state.writes.push(...(Array.isArray(payload) ? payload : [payload]));
       return ok({ Success: true });

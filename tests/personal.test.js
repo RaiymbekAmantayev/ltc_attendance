@@ -39,7 +39,7 @@ test('Progress Test пишется тем, кому введены баллы; �
     skills: [1, 2, 3, 4, 5, 6, 7, 21].map(id => ({ skillId: id, score: PROGRESS[id] })), commentHtml: 'Unit 3 &amp; 4',
   });
   const card = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG })).json.find(g => g.id === '31');
-  assert.equal(card.total, 7); assert.equal(card.done, 7);                    // тема + 3 посещаемости + 2 ежедневных + 1 доп.
+  assert.equal(card.total, 9); assert.equal(card.done, 9);                    // тема + 3 посещаемости + 2 ежедневных + 1 доп. + 2 коина
 });
 
 test('Final Test пишется с типом 4 («Общий») без Attendance; старый тип 1 из очереди тоже уходит как 4', async () => {
@@ -86,7 +86,7 @@ test('ежедневный тест обязателен и при выбран�
 test('сбой доп. теста → «частично», досылка пишет только его', async () => {
   for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502, when: p => p.testTypeId === 1 });   // только доп. тест
   const key = h.uuid();
-  const res = await api.request('POST', '/api/lessons', { tg: TG, body: { key, groupId: '31', date: h.WED, topic: '', personal: { categoryId: 1, testTypeId: 1 },
+  const res = await api.request('POST', '/api/lessons', { tg: TG, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', personal: { categoryId: 1, testTypeId: 1 },
     students: [{ id: '3101', status: 'present', skills: DAILY, personalSkills: PROGRESS }] } });
   assert.equal(res.json.status, 'partial');
   assert.equal((await require('../src/services/submissionService').push(key)).status, 'done');

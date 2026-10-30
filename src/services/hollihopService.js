@@ -6,6 +6,7 @@ const { weekdayBit, addDays, todayIso } = require('../lib/date');
 const mock = require('./hollihopMock');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
+const coins = require('../config/coins');
 
 const MAX_RETRIES = Number(process.env.HH_MAX_RETRIES ?? 4);
 const RETRY_BASE_MS = Number(process.env.HH_RETRY_BASE_MS ?? 700);
@@ -324,6 +325,33 @@ exports.writePersonalTest = async (s, payload) => {
     skills: found.type.skills.map(k => ({ skillId: k.id, score: Number(s.personalSkills[k.id]) })),
     commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',
   });
+};
+
+/**
+ * Начисление коинов: читаем пользовательское поле «Коины» ученика (GetStudents → ExtraFields), прибавляем и пишем
+ * обратно через EditUserExtraFields. Запросы по одному ученику идут строго по очереди, чтобы два урока не затёрли друг друга.
+ */
+const coinLocks = new Map();
+exports.addCoins = (clientId, amount) => {
+  const key = String(clientId);
+  const run = (coinLocks.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
+    const { Students = [] } = await call('GetStudents', { clientId: Number(clientId) });
+    const student = Students.find(s => String(s.ClientId) === key) || Students[0];
+    if (!student) throw new HollyHopError(`HH GetStudents: ученик ${key} не найден`, 'BAD_REQUEST');
+    // EditUserExtraFields заменяет весь набор полей: шлём все поля ученика, меняя только «Коины», иначе остальные сотрутся.
+    const fields = (student.ExtraFields || []).map(f => ({ name: f.Name, value: f.Value ?? '' }));
+    const isCoins = f => String(f.name).trim().toLowerCase() === coins.field.toLowerCase();
+    const field = fields.find(isCoins);
+    const current = Number(String(field?.value ?? '').replace(',', '.').replace(/\s/g, '')) || 0;
+    const total = Math.round((current + amount) * 100) / 100;
+    if (field) field.value = String(total);
+    else fields.push({ name: coins.field, value: String(total) });
+    await call('EditUserExtraFields', { studentClientId: Number(clientId), fields });
+    return { before: current, added: amount, total };
+  });
+  coinLocks.set(key, run);
+  run.finally(() => { if (coinLocks.get(key) === run) coinLocks.delete(key); }).catch(() => {});
+  return run;
 };
 
 // Тема урока: в API 2.0 нет документированного метода — хранится только у нас (уточнить в песочнице).

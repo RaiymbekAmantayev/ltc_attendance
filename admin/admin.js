@@ -494,7 +494,8 @@
           <dt>Навыки и баллы</dt><dd>${Object.entries(c.testing.skillsByType).map(([type, list]) => `<b>${type}</b>: ${list.map(k => `${esc(k.name)} (№${k.id ?? '— ID не указан'}): 0–${k.max}${k.default != null ? `, по умолч. ${k.default}` : ''}${k.pass != null ? `, порог ${k.pass}` : ''}`).join(' · ')}`).join('<br>')}</dd>
           <dt>Доп. (персональный) тест</dt><dd>по желанию, не больше одного на урок · AddEditPersonalTestResult<br>${c.personalTests.map(cat => `<b>${esc(cat.name)}</b> (кат. ${cat.id}): ${cat.types.map(x => `${esc(x.name)} — тип ${x.id}: ${x.skills.map(k => `${esc(k.name)} (№${k.id}) 0–${k.max}`).join(', ')}`).join(' | ')}`).join('<br>')}</dd>
           <dt>Тест пишется для групп</dt><dd>${c.testing.edUnitIds.length ? esc(c.testing.edUnitIds.join(', ')) : 'для всех'} <span class="mut">HH_TEST_EDUNIT_IDS</span></dd>
-          <dt>Тема урока обязательна (= комментарий в HollyHop)</dt><dd>${yes(c.rules.commentRequired)} <span class="mut">COMMENT_REQUIRED</span></dd>
+          <dt>Тема урока (= комментарий в HollyHop)</dt><dd>обязательна при отправке результатов</dd>
+          <dt>Коины (поле ученика «Коины»)</dt><dd>ежедневный тест: (ДЗ + активность) × 2 · Progress Test, Final Test, Revise&Check, File Test NEF: 60–80 % → +10, от 80 % → +20</dd>
           <dt>Макс. длина комментария</dt><dd>${c.rules.commentMaxLen} <span class="mut">COMMENT_MAX_LEN</span></dd>
         </dl><p class="note" style="margin-top:12px">Тесты и комментарий — только для тех, кто был на уроке. Ежедневный тест обязателен (навык 8 всегда 45); доп. тест — по выбору преподавателя, баллы вводятся тем ученикам, кто его писал. Менять — в файле .env, затем перезапустить сервер.</p></div>
       <div class="card"><div class="card-title">Система</div>
