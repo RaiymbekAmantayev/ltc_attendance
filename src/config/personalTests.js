@@ -35,6 +35,8 @@ module.exports = {
         k(4, 'Vocabulary', 25), k(5, 'Pronunciation', 10)] }] },
     { id: 45, name: 'File Test NEF', types: Array.from({ length: 12 }, (_, i) =>   // File 1–12 → testTypeId 137–148
       ({ id: 137 + i, name: `File ${i + 1}`, skills: NEF })) },
+    { id: 2, name: 'Quick Test NEF', types: [
+      { id: 2, name: 'Quick Test NEF', skills: [k(3, 'Grammar', 20), k(4, 'Vocabulary', 20), k(5, 'Pronunciation', 10)] }] },
   ],
 
   /** Тип теста категории (в т.ч. по прежнему id из legacyIds) или null, если такой пары нет. */

@@ -16,7 +16,7 @@ window.TEXTS = {
     status: { none: 'Не отмечено', pending: '⏳ Ждёт отправки', partial: '⚠️ Отправлено частично', attention: '⚠️ Нужно внимание', done: '✅ В HollyHop' },
     // группа
     topic: 'Тема урока', ktpPick: 'Тема из КТП · {level}', ktpWeek: 'Нед. {n} ·', ktpLesson: 'Урок {n} ·', ktpSection: 'Секция', ktpPage: 'Стр. SB', ktpGrammar: 'Грамматика', ktpVocabulary: 'Лексика', ktpHomework: 'Домашнее задание', ktpTest: 'Тест/контроль',
-    personalTest: 'Доп. тест', personalNone: 'Без доп. теста', personalPickType: 'Тип теста…', skill: 'Навык {id}', comment: 'Комментарий', save: 'Сохранить',
+    personalTest: 'Доп. тест', personalNone: 'Без доп. теста', personalPickType: 'Тип теста…', skill: 'Навык {id}', comment: 'Комментарий', homework: 'Домашнее задание (Дз)', save: 'Сохранить',
     present: 'Был', absent: 'Пропуск',
     readOnly: 'Отметка сохранена — только чтение. Исправления вносит куратор.',
     attentionNote: 'Запись в HollyHop не прошла. Это не ваша ошибка — сообщение уже у администратора.',
@@ -25,7 +25,7 @@ window.TEXTS = {
     confirmTitle: 'Сохранить отметку?', confirmText: 'После сохранения изменить отметку нельзя — исправления только через куратора.',
     confirmYes: 'Да, сохранить', cancel: 'Отмена',
     saved: 'Сохранено', queuedToast: 'Сохранено на телефоне — уйдёт при появлении связи',
-needTest: 'Введите баллы теста: {name}', needTestFull: 'Заполните баллы по всем навыкам ({skill}): {name}', needTopic: 'Укажите тему урока', needPersonalType: 'Выберите тип доп. теста', needPersonalScores: 'Введите баллы «{test}» хотя бы одному ученику или уберите доп. тест',
+needTest: 'Введите баллы теста: {name}', needTestFull: 'Заполните баллы по всем навыкам ({skill}): {name}', needTopic: 'Укажите тему урока', needHomework: 'Укажите домашнее задание', needPersonalType: 'Выберите тип доп. теста', needPersonalScores: 'Введите баллы «{test}» хотя бы одному ученику или уберите доп. тест',
     scoreRange: 'Балл навыка {skill} должен быть от 0 до {max}: {name}', badScore: 'Балл должен быть числом: {name}',
     // профиль
     profileTitle: 'Мой профиль', lessonsMonth: 'Уроков за месяц', attendance: 'Посещаемость', onTime: 'Отмечено в день урока', avgTest: 'Средний тест, %', testPass: 'Порог теста',
@@ -44,7 +44,7 @@ needTest: 'Введите баллы теста: {name}', needTestFull: 'Зап�
     teachersTitle: 'Преподаватели', done: 'Записано', problemsShort: 'Проблем', noTelegram: 'нет Telegram ID', inactive: 'неактивен',
     errors: {
       forbidden: 'Нет доступа к этой группе', already_saved: 'Это занятие уже отмечено', lesson_full: 'На это занятие уже есть две отметки', bad_request: 'Некорректные данные',
-      unknown_student: 'Ученик не из этой группы', test_required: 'Тест обязателен', test_incomplete: 'Нужны баллы по всем навыкам теста', bad_personal_test: 'Неизвестный доп. тест', personal_empty: 'Доп. тест выбран, но баллы не введены', comment_required: 'Тема урока обязательна',
+      unknown_student: 'Ученик не из этой группы', test_required: 'Тест обязателен', test_incomplete: 'Нужны баллы по всем навыкам теста', bad_personal_test: 'Неизвестный доп. тест', personal_empty: 'Доп. тест выбран, но баллы не введены', comment_required: 'Тема урока обязательна', homework_required: 'Домашнее задание обязательно',
       score_out_of_range: 'Балл вне допустимого диапазона', bad_score: 'Балл должен быть числом', rate_limited: 'Слишком часто, подождите минуту',
       bad_init_data: 'Сессия Telegram устарела — откройте кабинет заново', server: 'Ошибка сервера',
     },
@@ -63,7 +63,7 @@ needTest: 'Введите баллы теста: {name}', needTestFull: 'Зап�
     written: 'written {done} of {total}',
     status: { none: 'Not marked', pending: '⏳ Pending', partial: '⚠️ Partially sent', attention: '⚠️ Needs attention', done: '✅ In HollyHop' },
     topic: 'Lesson topic', ktpPick: 'Topic from the plan · {level}', ktpWeek: 'Wk {n} ·', ktpLesson: 'Lesson {n} ·', ktpSection: 'Section', ktpPage: 'SB page', ktpGrammar: 'Grammar', ktpVocabulary: 'Vocabulary', ktpHomework: 'Homework', ktpTest: 'Test/control',
-    personalTest: 'Extra test', personalNone: 'No extra test', personalPickType: 'Test type…', skill: 'Skill {id}', comment: 'Comment', save: 'Save',
+    personalTest: 'Extra test', personalNone: 'No extra test', personalPickType: 'Test type…', skill: 'Skill {id}', comment: 'Comment', homework: 'Homework (Hw)', save: 'Save',
     present: 'Present', absent: 'Absent',
     readOnly: 'Saved — read only. Corrections are made by your supervisor.',
     attentionNote: 'Writing to HollyHop failed. This is not your fault — the administrator has been notified.',
@@ -72,7 +72,7 @@ needTest: 'Введите баллы теста: {name}', needTestFull: 'Зап�
     confirmTitle: 'Save attendance?', confirmText: 'Once saved, it cannot be changed — corrections go through your supervisor.',
     confirmYes: 'Yes, save', cancel: 'Cancel',
     saved: 'Saved', queuedToast: 'Saved on your phone — will be sent when online',
-needTest: 'Enter test scores: {name}', needTestFull: 'Enter scores for all skills ({skill}): {name}', needTopic: 'Enter the lesson topic', needPersonalType: 'Choose the extra test type', needPersonalScores: 'Enter “{test}” scores for at least one student or remove the extra test',
+needTest: 'Enter test scores: {name}', needTestFull: 'Enter scores for all skills ({skill}): {name}', needTopic: 'Enter the lesson topic', needHomework: 'Enter the homework', needPersonalType: 'Choose the extra test type', needPersonalScores: 'Enter “{test}” scores for at least one student or remove the extra test',
     scoreRange: 'Skill {skill} score must be 0–{max}: {name}', badScore: 'Score must be a number: {name}',
     profileTitle: 'My profile', lessonsMonth: 'Lessons this month', attendance: 'Attendance', onTime: 'Marked on lesson day', avgTest: 'Average test, %', testPass: 'Test pass rate',
     checklist: 'Is everything written to HollyHop', recent: 'Recent lessons', noRecent: 'No lessons marked this month yet',
@@ -87,7 +87,7 @@ needTest: 'Enter test scores: {name}', needTestFull: 'Enter scores for all skill
     teachersTitle: 'Teachers', done: 'Written', problemsShort: 'Issues', noTelegram: 'no Telegram ID', inactive: 'inactive',
     errors: {
       forbidden: 'No access to this group', already_saved: 'This lesson is already marked', lesson_full: 'This lesson already has two submissions', bad_request: 'Invalid data',
-      unknown_student: 'Student is not in this group', test_required: 'Test is required', test_incomplete: 'Scores for all test skills are required', bad_personal_test: 'Unknown extra test', personal_empty: 'Extra test selected but no scores entered', comment_required: 'Lesson topic is required',
+      unknown_student: 'Student is not in this group', test_required: 'Test is required', test_incomplete: 'Scores for all test skills are required', bad_personal_test: 'Unknown extra test', personal_empty: 'Extra test selected but no scores entered', comment_required: 'Lesson topic is required', homework_required: 'Homework is required',
       score_out_of_range: 'Score is out of range', bad_score: 'Score must be a number', rate_limited: 'Too many requests, wait a minute',
       bad_init_data: 'Telegram session expired — reopen the cabinet', server: 'Server error',
     },

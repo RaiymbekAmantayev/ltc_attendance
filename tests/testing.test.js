@@ -15,7 +15,7 @@ before(async () => {
 after(() => api.close());
 beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissions'); await h.db.query('DELETE FROM substitutions'); });
 
-const save = (tg, group, list, topic = 'Unit 1') => api.request('POST', '/api/lessons', { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, students: list } });
+const save = (tg, group, list, topic = 'Unit 1', homework = 'Ex. 1') => api.request('POST', '/api/lessons', { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, homework, students: list } });
 
 test('тестовая группа 31: тип 132 для местного, навык 8 всегда 45, «опоздал» → «был»', async () => {
   const me = (await api.request('GET', '/api/me', { tg: TG.ru })).json;
@@ -32,7 +32,7 @@ test('тестовая группа 31: тип 132 для местного, на
   assert.equal(h.mock.state.writes.length, 3, 'посещаемость — всем');
   assert.equal(h.mock.state.tests.length, 2, 'тест — только присутствовавшим');
   assert.deepEqual(h.mock.state.tests[0], { studentClientId: 3101, dateTime: `${h.WED}T09:00:00`, discipline: 'Английский', teacherId: 101, testTypeId: 132,
-    skills: [{ skillId: 8, score: 45 }, { skillId: 13, score: 4 }, { skillId: 9, score: 5 }, { skillId: 10, score: 5 }], commentHtml: 'Unit 1' });
+    skills: [{ skillId: 8, score: 45 }, { skillId: 13, score: 4 }, { skillId: 9, score: 5 }, { skillId: 10, score: 5 }], commentHtml: 'Unit 1<br>Дз/Hw: Ex. 1' });
   assert.deepEqual(h.mock.state.tests[1].skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 3.5 }, { skillId: 9, score: 2 }, { skillId: 10, score: 2 }]);
 });
 
@@ -68,7 +68,7 @@ test('сбой теста → «частично», досылка не дубл
   for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502 });
   const key = h.uuid();
   const list = [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }, { id: '3102', status: 'present', skills: { 13: 4, 9: 4, 10: 4 } }];
-  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', students: list } });
+  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', homework: 'Ex. 1', students: list } });
   assert.equal(res.json.status, 'partial');
   assert.equal(h.mock.state.writes.length, 2);
   assert.equal(h.mock.state.tests.length, 1);
@@ -91,7 +91,16 @@ test('HollyHop отклонил тест (400) → «нужно внимание
   assert.match(row.last_error, /навыков/);
 });
 
-test('в commentHtml уходит тема урока (экранирована), свой комментарий ученика игнорируется', async () => {
-  await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 }, comment: 'чужой текст' }], 'Past & Present');
-  assert.equal(h.mock.state.tests[0].commentHtml, 'Past &amp; Present');
+test('в commentHtml уходит тема урока и под ней ДЗ (экранированы), свой комментарий ученика игнорируется', async () => {
+  await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 }, comment: 'чужой текст' }], 'Past & Present', 'Ex. 2 <p. 10>');
+  assert.equal(h.mock.state.tests[0].commentHtml, 'Past &amp; Present<br>Дз/Hw: Ex. 2 &lt;p. 10&gt;');
+});
+
+test('ДЗ обязательно: без него отметка не принимается, сохраняется в отметке', async () => {
+  const list = [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }];
+  assert.equal((await save(TG.ru, '31', list, 'Unit 1', '   ')).json.error, 'homework_required');
+  assert.equal(h.mock.state.writes.length, 0);
+  await save(TG.ru, '31', list, 'Unit 1', 'WB p. 5');
+  const view = await api.request('GET', `/api/groups/31/students?date=${h.WED}`, { tg: TG.ru });
+  assert.equal(view.json.submitted.payload.homework, 'WB p. 5');
 });

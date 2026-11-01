@@ -1,12 +1,12 @@
 // Коины ученика: пользовательское поле «Коины» в карточке ученика HollyHop. Начисляются после записи результатов урока.
-// Ежедневный тест: (ДЗ + активность) × 2. Доп. тесты Progress Test, Final Test, Revise&Check, File Test NEF:
+// Ежедневный тест: (ДЗ + активность) × 2. Доп. тесты Progress Test, Final Test, Revise&Check, File Test NEF, Quick Test NEF:
 // 60–80 % от максимума → 10 коинов, 80 % и выше → 20 (Entry test коинов не даёт).
 const testing = require('./testing');
 const personalTests = require('./personalTests');
 
 const HOMEWORK = [11, 13];                                   // Homework (131) / Домашнее задание (132)
 const ENGAGEMENT = 9;                                        // Engagement / Активность
-const SCORED_CATEGORIES = [1, 4, 5, 45];                    // Progress Test, Final Test, Revise&Check, File Test NEF
+const SCORED_CATEGORIES = [1, 4, 5, 45, 2];                 // Progress Test, Final Test, Revise&Check, File Test NEF, Quick Test NEF
 
 module.exports = {
   /** Название пользовательского поля ученика в HollyHop. */

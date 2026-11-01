@@ -18,7 +18,7 @@ beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissio
 
 const students = async group => (await api.request('GET', `/api/groups/${group}/students?date=${h.WED}`, { tg: TG.teacher })).json.students;
 const DAILY = { 13: 5, 9: 5, 10: 5 };                            // ежедневный тест обязателен для присутствовавших
-const body = (key, group, list, extra = {}) => ({ key, groupId: group, date: h.WED, topic: 'Past Simple', students: list, ...extra });
+const body = (key, group, list, extra = {}) => ({ key, groupId: group, date: h.WED, topic: 'Past Simple', homework: 'Ex. 1', students: list, ...extra });
 
 test('initData: подделка, чужой токен, просрочка и незнакомый человек отклоняются', async () => {
   assert.equal((await api.request('GET', '/api/me')).status, 401);
@@ -70,7 +70,7 @@ test('сохранение пишет посещаемость в HollyHop; по
   assert.equal(test.teacherId, 101);
   assert.equal(test.dateTime, `${h.WED}T10:00:00`);           // начало занятия по расписанию
   assert.deepEqual(test.skills, [{ skillId: 8, score: 45 }, { skillId: 13, score: 5 }, { skillId: 9, score: 4 }, { skillId: 10, score: 4 }]);
-  assert.equal(test.commentHtml, 'Past Simple');
+  assert.equal(test.commentHtml, 'Past Simple<br>Дз/Hw: Ex. 1');
 
   const again = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(key, '9001', list) });
   assert.equal(again.json.status, 'done');

@@ -123,10 +123,13 @@ exports.report = async (from, to) => {
 
 exports.BANDS = BANDS;
 exports.bandOf = bandOf;
+exports.lookupGroups = lookupGroups;
+exports.ruDate = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+exports.PCT_STYLE = { good: 'pctGood', mid: 'pctMid', bad: 'pctBad' };
 
 /* ---------------- Excel ---------------- */
 
-const ruDate = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+const { ruDate, PCT_STYLE } = exports;
 
 /** Лист «Отчет»: по каждой категории — уровни, сколько сдали, сколько ≥80%, 70–79%, <70%; итоги и доли формулами. */
 function summarySheet(rep) {
@@ -151,8 +154,6 @@ function summarySheet(rep) {
   return { name: 'Отчет', rows, merges, widths: [26, 20, 12, 12, 12], heights: { 1: 22 } };
 }
 
-const PCT_STYLE = { good: 'pctGood', mid: 'pctMid', bad: 'pctBad' };
-
 /** Лист категории (или Daily test): строка максимумов, шапка, строка на результат; % раскрашен по диапазону, ноль по навыку — красный. */
 function resultsSheet(sheet) {
   const { STYLES: S } = xlsx;
@@ -176,4 +177,5 @@ function resultsSheet(sheet) {
   };
 }
 
-exports.toXlsx = rep => xlsx.build([summarySheet(rep), ...rep.sheets.map(resultsSheet)]);
+/** Листы книги «Тесты учеников»: «Отчет» и по листу на категорию / Daily test. */
+exports.xlsxSheets = rep => [summarySheet(rep), ...rep.sheets.map(resultsSheet)];

@@ -78,7 +78,7 @@ test('преподаватель видит темы уровня группы, 
 
   const topic = view.ktp.categories[0].topics[0];
   const list = view.students.map(s => ({ id: s.id, status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }));
-  const saved = await api.request('POST', '/api/lessons', { tg: TG, body: { key: h.uuid(), groupId: '9001', date: h.WED, topic: topic.title, ktpTopicId: topic.id, students: list } });
+  const saved = await api.request('POST', '/api/lessons', { tg: TG, body: { key: h.uuid(), groupId: '9001', date: h.WED, topic: topic.title, homework: 'Ex. 1', ktpTopicId: topic.id, students: list } });
   assert.equal(saved.status, 200);
   const after = (await api.request('GET', `/api/groups/9001/students?date=${h.WED}`, { tg: TG })).json;
   assert.equal(after.submitted.payload.ktpTopicId, topic.id);

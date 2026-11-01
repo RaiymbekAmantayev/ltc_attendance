@@ -33,6 +33,8 @@ module.exports = {
     testRequired: true,                                                // ежедневный тест обязателен всегда (TEST_REQUIRED больше не читается)
     commentRequired: true,                                             // тема урока обязательна всегда (COMMENT_REQUIRED больше не читается)
     commentMaxLen: num('COMMENT_MAX_LEN', 500),
+    homeworkRequired: true,                                            // домашнее задание обязательно: в HollyHop — строкой «Дз/Hw:» под темой
+    homeworkMaxLen: 500,
   },
   lowFillThreshold: num('LOW_FILL_THRESHOLD', 3),
   initDataMaxAge: num('INITDATA_MAX_AGE', 86400),

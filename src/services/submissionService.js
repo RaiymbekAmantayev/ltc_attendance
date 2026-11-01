@@ -65,7 +65,7 @@ function pickPersonal(raw) {
 const testDateTime = (date, group) => `${date}T${(/^\d{1,2}:\d\d/.exec(group.time || '') || ['00:00'])[0].padStart(5, '0')}:00`;
 
 /** Принимает отметку: сохраняет у себя и отправляет в HollyHop. Повтор с тем же key безопасен (разд. 7.1 ТЗ). */
-exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students, personal: personalRaw }) => {
+exports.save = async (teacher, { key, groupId, date, topic, homework, ktpTopicId, students, personal: personalRaw }) => {
   if (!teacher.id) throw new AppError(403, 'forbidden');
   if (!UUID.test(key || '') || !lessons.isDate(date) || !groupId || !Array.isArray(students) || !students.length || students.length > 300) {
     throw new AppError(400, 'bad_request');
@@ -76,11 +76,14 @@ exports.save = async (teacher, { key, groupId, date, topic, ktpTopicId, students
   const roster = new Map((await hollihop.students(groupId)).map(s => [s.id, s.name]));
   const unique = [...new Map(students.map(s => [String(s.id), s])).values()];
   const cleanTopic = String(topic || '').trim().slice(0, 500);
+  const cleanHomework = String(homework || '').trim().slice(0, rules.homeworkMaxLen);
+  if (rules.homeworkRequired && !cleanHomework) throw new AppError(422, 'homework_required');
   const personal = pickPersonal(personalRaw);
   // Тема из КТП — для отчётов; если её успели удалить, отметку не блокируем (могла ждать в очереди телефона).
   const ktpTopic = Number(ktpTopicId) > 0 ? await Ktp.topicById(Number(ktpTopicId)) : null;
   const payload = {
     topic: cleanTopic,
+    homework: cleanHomework,                                               // в HollyHop — под темой: «Дз/Hw: …»
     ktpTopicId: ktpTopic ? ktpTopic.id : null,
     level: group.level || '',                                              // для выгрузки тестов по уровням
     testTypeId: exports.testTypeFor(teacher),

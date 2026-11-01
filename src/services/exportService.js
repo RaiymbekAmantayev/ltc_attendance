@@ -1,11 +1,13 @@
 // Выгрузка для админки: «Расписание» (из HollyHop) и «Фактические отметки» (наши сабмиты) — уроки преподавателей по дням;
-// «Тесты учеников» — результаты доп. и ежедневных тестов (testsExportService).
+// «Тесты учеников» — результаты доп. и ежедневных тестов (testsExportService), вкладки «По преподавателям» — средний % учеников
+// и «Посещаемость» — пропуски учеников (studentReportsService).
 // Листы: иностранные и местные преподаватели — по ФИО: латиница — иностранный, кириллица — местный.
 const hollihop = require('./hollihopService');
 const Submission = require('../models/submissionModel');
 const Teacher = require('../models/teacherModel');
 const xlsx = require('../lib/xlsx');
 const testsExport = require('./testsExportService');
+const studentReports = require('./studentReportsService');
 const { isDate, addDays } = require('../lib/date');
 const { AppError } = require('../middleware/errorHandler');
 
@@ -83,10 +85,12 @@ exports.submissions = async (from, to) => {
   return report('submissions', from, to, days, rows);
 };
 
-/** Тесты учеников за период: доп. тесты по категориям и средние ежедневного теста. */
+/** Тесты учеников за период: доп. тесты по категориям, средние ежедневного теста, средний % учеников по преподавателям и посещаемость. */
 exports.tests = async (from, to) => {
   exports.period(from, to, TESTS_MAX_DAYS);
-  return testsExport.report(from, to);
+  const [rep, byTeacher, attendance] = await Promise.all([
+    testsExport.report(from, to), studentReports.results(from, to), studentReports.attendance(from, to)]);
+  return { ...rep, byTeacher, attendance };
 };
 
 /** Подпись дня в шапке: у расписания «21.09», у отметок — число месяца. */
@@ -125,7 +129,10 @@ function sheet(rep, { name, rows }) {
   };
 }
 
-/** Книга Excel: лист иностранных и лист местных преподавателей. */
-exports.toXlsx = rep => (rep.kind === 'tests' ? testsExport.toXlsx(rep) : xlsx.build(rep.sheets.map(s => sheet(rep, s))));
+/** Книга Excel: лист иностранных и лист местных преподавателей; у тестов — ещё «По преподавателям» (options.teacher) и посещаемость (options.attendanceTeacher). */
+exports.toXlsx = (rep, options = {}) => (rep.kind === 'tests'
+  ? xlsx.build([...testsExport.xlsxSheets(rep), studentReports.resultsSheet(rep, options.teacher),
+    ...studentReports.attendanceSheets(rep, options.attendanceTeacher)])
+  : xlsx.build(rep.sheets.map(s => sheet(rep, s))));
 
 exports.fileName = rep => `LTC_${rep.kind}_${rep.from}_${rep.to}.xlsx`;

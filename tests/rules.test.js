@@ -11,7 +11,7 @@ before(async () => {
 });
 after(() => api.close());
 
-const save = (list, group = '9001', topic = '') => api.request('POST', '/api/lessons', { tg: 3001, body: { key: h.uuid(), groupId: group, date: h.WED, topic, students: list } });
+const save = (list, group = '9001', topic = '', homework = 'Ex. 1') => api.request('POST', '/api/lessons', { tg: 3001, body: { key: h.uuid(), groupId: group, date: h.WED, topic, homework, students: list } });
 const SK = { 13: 4, 9: 5, 10: 5 };
 
 test('правила из разд. 5 ТЗ: тест и комментарий (= тема урока) обязательны только для присутствовавших', async () => {

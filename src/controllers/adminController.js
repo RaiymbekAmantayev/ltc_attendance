@@ -86,9 +86,9 @@ exports.removeSubstitution = async (req, res) => {
   res.json({ ok: 1 });
 };
 
-// ── Выгрузка: расписание (HollyHop) и фактические отметки за период; ?format=xlsx — файл Excel ──
+// ── Выгрузка: расписание (HollyHop), отметки, тесты и отчёты по ученикам за период; ?format=xlsx — файл Excel (&teacher= — преподаватель) ──
 exports.exportReport = async (req, res) => {
-  const { kind } = req.params, { from, to, format } = req.query;
+  const { kind } = req.params, { from, to, format, teacher, attendanceTeacher } = req.query;
   if (!exportService.KINDS[kind]) throw new AppError(404, 'Нет такой выгрузки');
   const report = await exportService[kind](from, to);
   if (format !== 'xlsx') return res.json(report);
@@ -96,7 +96,7 @@ exports.exportReport = async (req, res) => {
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition': `attachment; filename="${exportService.fileName(report)}"`,
   });
-  res.send(exportService.toXlsx(report));
+  res.send(exportService.toXlsx(report, { teacher, attendanceTeacher }));
 };
 
 // ── Отметки и аудит ──

@@ -287,6 +287,9 @@ exports.writeAttendance = (groupId, date, s) =>
   }]);
 
 const escapeHtml = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** commentHtml теста: тема урока, под ней — домашнее задание «Дз/Hw: …» (у старых отметок ДЗ нет). */
+const commentHtml = (s, payload = {}) => [s.comment, payload.homework && `Дз/Hw: ${payload.homework}`]
+  .filter(Boolean).map(v => escapeHtml(v).replace(/\n/g, '<br>')).join('<br>');
 
 /** Нужно ли писать тест для этой учебной единицы (HH_TEST_EDUNIT_IDS пуст = для всех). */
 exports.testEnabledFor = groupId => !testing.edUnitIds.length || testing.edUnitIds.includes(String(groupId));
@@ -294,7 +297,7 @@ exports.testEnabledFor = groupId => !testing.edUnitIds.length || testing.edUnitI
 /**
  * Ежедневный тест ученика — тоже персональный: AddEditPersonalTestResult с типом 131/132 (без id — добавление).
  * У каждого преподавателя свой результат (teacherId, время его занятия), поэтому два преподавателя одного урока не затирают друг друга.
- * Шаг идёт в общей очереди: после успеха повторно не отправляется. Комментарий (= тема урока) уходит в commentHtml.
+ * Шаг идёт в общей очереди: после успеха повторно не отправляется. В commentHtml — тема урока и под ней ДЗ.
  */
 exports.writeReport = async (groupId, date, s, payload = {}) => {
   if (!s.skills || !payload.testTypeId || !exports.testEnabledFor(groupId)) return { local: true };
@@ -305,13 +308,13 @@ exports.writeReport = async (groupId, date, s, payload = {}) => {
     ...(payload.teacherId ? { teacherId: payload.teacherId } : {}),
     testTypeId: payload.testTypeId,
     skills: testing.skillsFor(payload.testTypeId).map(k => ({ skillId: k.id, score: Number(s.skills[k.id]) })),
-    commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',
+    commentHtml: commentHtml(s, payload),
   });
 };
 
 /**
  * Персональный тест ученика: AddEditPersonalTestResult (без id — добавление). Набор навыков — весь набор выбранного типа теста.
- * Комментарий (= тема урока) уходит в commentHtml. Шаг идёт в общей очереди: после успеха повторно не отправляется.
+ * В commentHtml — тема урока и под ней ДЗ. Шаг идёт в общей очереди: после успеха повторно не отправляется.
  */
 exports.writePersonalTest = async (s, payload) => {
   const found = payload.personal && personalTests.find(payload.personal.categoryId, payload.personal.testTypeId);
@@ -323,7 +326,7 @@ exports.writePersonalTest = async (s, payload) => {
     ...(payload.personal.teacherId ? { teacherId: payload.personal.teacherId } : {}),
     testTypeId: found.type.id,
     skills: found.type.skills.map(k => ({ skillId: k.id, score: Number(s.personalSkills[k.id]) })),
-    commentHtml: s.comment ? escapeHtml(s.comment).replace(/\n/g, '<br>') : '',
+    commentHtml: commentHtml(s, payload),
   });
 };
 

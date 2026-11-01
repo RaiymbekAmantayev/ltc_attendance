@@ -21,7 +21,7 @@ after(() => api.close());
 beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissions'); });
 
 const save = (tg, group, students, personal, topic = 'Unit 5') => api.request('POST', '/api/lessons',
-  { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, personal, students } });
+  { tg, body: { key: h.uuid(), groupId: group, date: h.WED, topic, homework: 'Ex. 1', personal, students } });
 
 test('тема урока обязательна при отправке результатов', async () => {
   const res = await save(TG.ru, '31', [{ id: '3101', status: 'present', skills: { 13: 4, 9: 5, 10: 5 } }], undefined, '  ');
@@ -62,7 +62,7 @@ test('Final Test: 60–80 % → +10, от 80 % → +20, ниже 60 % → 0 (п�
   assert.deepEqual(h.mock.state.coins, { 3102: '10', 3103: '24' });
 });
 
-test('Progress Test, Revise&Check и File Test NEF — по тем же порогам; Entry test коинов не даёт', async () => {
+test('Progress Test, Revise&Check, File Test NEF и Quick Test NEF — по тем же порогам; Entry test коинов не даёт', async () => {
   const daily = { 13: 0, 9: 0, 10: 0 };
   const one = async (personal, scores) => {
     h.mock.reset(); await h.db.query('DELETE FROM submissions');
@@ -79,6 +79,11 @@ test('Progress Test, Revise&Check и File Test NEF — по тем же поро
   // File Test NEF «File 1»: максимум 105
   assert.equal(await one({ categoryId: 45, testTypeId: 137 }, { 1: 10, 2: 15, 3: 20, 4: 20, 5: 10, 6: 8, 7: 0, 16: 0 }), '10');   // 83/105 = 79 %
   assert.equal(await one({ categoryId: 45, testTypeId: 137 }, { 1: 10, 2: 15, 3: 20, 4: 20, 5: 10, 6: 9, 7: 0, 16: 0 }), '20');   // 84/105 = 80 %
+  // Quick Test NEF: Grammar 20, Vocabulary 20, Pronunciation 10 — максимум 50; в HollyHop — категория 2, тип 2
+  assert.equal(await one({ categoryId: 2, testTypeId: 2 }, { 3: 20, 4: 15, 5: 5 }), '20');                                   // 40/50 = 80 %
+  assert.equal(h.mock.state.personal.find(t => t.testTypeId === 2).skills.map(k => [k.skillId, k.score]).join(';'), '3,20;4,15;5,5');
+  assert.equal(await one({ categoryId: 2, testTypeId: 2 }, { 3: 15, 4: 15, 5: 0 }), '10');                                    // 30/50 = 60 %
+  assert.equal(await one({ categoryId: 2, testTypeId: 2 }, { 3: 15, 4: 14, 5: 0 }), null);                                    // 29/50 = 58 %
   // Entry test — без коинов
   assert.equal(await one({ categoryId: 6, testTypeId: 111 }, { 3: 25, 4: 25 }), null);
 });
@@ -86,7 +91,7 @@ test('Progress Test, Revise&Check и File Test NEF — по тем же поро
 test('сбой записи коинов → «частично», досылка начисляет один раз', async () => {
   for (let i = 0; i < 5; i++) h.mock.failNext('EditUserExtraFields', { status: 502 });
   const key = h.uuid();
-  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: 'Unit 5',
+  const res = await api.request('POST', '/api/lessons', { tg: TG.ru, body: { key, groupId: '31', date: h.WED, topic: 'Unit 5', homework: 'Ex. 1',
     students: [{ id: '3101', status: 'present', skills: { 13: 5, 9: 5, 10: 5 } }] } });
   assert.equal(res.json.status, 'partial');
   assert.deepEqual(h.mock.state.coins, {});

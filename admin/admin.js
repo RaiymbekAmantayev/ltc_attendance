@@ -18,7 +18,7 @@
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
-  const PERSONAL_CATS = { 1: 'Progress Test', 4: 'Final Test', 6: 'Entry test', 5: 'Revise&Check', 45: 'File Test NEF' };
+  const PERSONAL_CATS = { 1: 'Progress Test', 4: 'Final Test', 6: 'Entry test', 5: 'Revise&Check', 45: 'File Test NEF', 2: 'Quick Test NEF' };
   const PERSONAL_SKILLS = { 1: 'Listening', 2: 'Reading', 3: 'Grammar', 4: 'Vocabulary', 5: 'Pronunciation', 6: 'Speaking', 7: 'Writing', 16: 'Practical English', 21: 'Attendance' };
   const personalLabel = p => (p.personal ? `${PERSONAL_CATS[p.personal.categoryId] || p.personal.categoryId} (тип ${p.personal.testTypeId})` : '');
   const personalScores = s => (s.personalSkills ? Object.entries(s.personalSkills).map(([k, v]) => `${PERSONAL_SKILLS[k] || '№' + k}: ${v}`).join(' · ') : '—');
@@ -276,6 +276,7 @@
       <div class="mrow"><span class="k">Автор</span><span class="v">${esc(x.full_name)}</span></div>
       <div class="mrow"><span class="k">Сохранено</span><span class="v">${esc(x.created_at)} UTC</span></div>
       <div class="mrow"><span class="k">Тема</span><span class="v">${esc(p.topic || '—')}</span></div>
+      <div class="mrow"><span class="k">Дз/Hw</span><span class="v">${esc(p.homework || '—')}</span></div>
       <div class="mrow"><span class="k">Доп. тест</span><span class="v">${esc(personalLabel(p) || '—')}</span></div>
       <div class="mrow"><span class="k">Шагов записано</span><span class="v">${pr.length}</span></div>
       <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
@@ -297,8 +298,8 @@
     } catch { LTC.toast('Id учеников из HollyHop не получены — в Excel будет только ClientId', 'bad'); }
     el.disabled = false;
     // ID — строкой, как в выгрузке сотрудников; баллы — числами
-    LTC.xlsx('LTC_submissions.xlsx', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'Ученик ID', 'Ученик ClientId', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
-    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, String(x.group_id), x.group_name, x.full_name, x.status, p.topic, ids[s.id] ?? '', String(s.id), s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); }), 'Отметки');
+    LTC.xlsx('LTC_submissions.xlsx', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'ДЗ', 'Ученик ID', 'Ученик ClientId', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, String(x.group_id), x.group_name, x.full_name, x.status, p.topic, p.homework || '', ids[s.id] ?? '', String(s.id), s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); }), 'Отметки');
   });
 
   /* ---------- Выгрузка: расписание (HollyHop), фактические отметки по дням, тесты учеников ---------- */
@@ -309,7 +310,7 @@
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 20));
     return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
   };
-  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign' };
+  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign', teacher: 'all', attTeacher: 'all' };
   let expCache = {};                                     // переключение листа не перезапрашивает HollyHop
   views.export = async () => {
     const f = state.exp, schedule = f.kind === 'schedule', range = `from=${f.from}&to=${f.to}`, key = `${f.kind}:${range}`;
@@ -318,7 +319,12 @@
     const rep = expCache[key] || (schedule && !requested ? null : (expCache[key] = await api(`/export/${f.kind}?${range}`)));
     const tests = f.kind === 'tests';
     if (rep && !tests && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = rep.sheets[0].key;
-    const sheet = rep && rep.sheets.find(x => x.key === f.sheet);
+    const sheet = rep && !tests && rep.sheets.find(x => x.key === f.sheet);
+    // «По преподавателям» в Excel — выбранный преподаватель (по умолчанию первый из списка), с других вкладок тестов — все;
+    // посещаемость — выбранная на её вкладке (по умолчанию все преподаватели).
+    if (rep && tests && f.sheet === 'teachers' && !rep.byTeacher.some(t => t.id === f.teacher)) f.teacher = rep.byTeacher[0]?.id || 'all';
+    if (rep && tests && !rep.attendance.scopes.some(x => x.id === f.attTeacher)) f.attTeacher = 'all';
+    const teacherQs = tests ? `${f.sheet === 'teachers' ? `&teacher=${encodeURIComponent(f.teacher)}` : ''}&attendanceTeacher=${encodeURIComponent(f.attTeacher)}` : '';
     const pill = (attr, value, label, active) => `<button class="pill ${active ? 'active' : ''}" ${attr}="${value}">${esc(label)}</button>`;
     const day = d => (schedule ? `${Number(d.slice(8))}.${d.slice(5, 7)}` : String(Number(d.slice(8))));
     main.innerHTML = `
@@ -326,10 +332,12 @@
         <input type="date" id="e-from" value="${f.from}"><span class="mut">—</span><input type="date" id="e-to" value="${f.to}">
         <button class="btn sm" data-act="exp-go">Показать</button>
         ${pill('data-exp-kind', 'schedule', 'Расписание', schedule)}${pill('data-exp-kind', 'submissions', 'Фактические отметки', f.kind === 'submissions')}${pill('data-exp-kind', 'tests', 'Тесты учеников', tests)}
-        ${rep ? `<a class="btn ghost sm" style="margin-left:auto" href="/admin-api/export/${f.kind}?${range}&format=xlsx" download>📥 Excel</a>` : ''}
+        ${rep ? `<a class="btn ghost sm" style="margin-left:auto" href="/admin-api/export/${f.kind}?${range}&format=xlsx${teacherQs}" download>📥 Excel</a>` : ''}
       </div>
       <p class="hint">${schedule
         ? 'Уроки по расписанию HollyHop: сколько занятий по группам у преподавателя в каждый день. Ак. час — 45 минут. Ставку и ЗП заполните в Excel — ЗП посчитается формулой.'
+        : tests && f.sheet === 'teachers' ? 'Средний % тестов каждого ученика преподавателя (ежедневный тест за каждый урок и доп. тесты) — в колонке своего диапазона. Только отметки из кабинета. Период — до года.'
+        : tests && f.sheet === 'attendance' ? 'Сколько учеников с 1 и 2 пропусками и с долей пропусков от 15%, 30%, 50% (ученик может попасть в несколько строк). По отметкам из кабинета, ученик — в своей группе. Период — до года.'
         : tests ? 'Результаты доп. тестов по каждому ученику (по листу на категорию) и средние баллы ежедневного теста. Только тесты, внесённые через кабинет. Период — до года.'
         : 'Уроки, которые преподаватели отметили в кабинете и отправили в HollyHop, по дням. Автор — тот, кто заполнил (в том числе на замене).'}</p>
       ${tests ? testsView(rep, f) : rep ? `<div class="toolbar">${rep.sheets.map(x => pill('data-exp-sheet', x.key, `${x.name} · ${x.rows.length}`, x.key === f.sheet)).join('')}</div>
@@ -346,8 +354,10 @@
   const pct = v => `${(v * 100).toFixed(1)}%`;
   function testsView(rep, f) {
     const pill = (key, label) => `<button class="pill ${key === f.sheet ? 'active' : ''}" data-exp-sheet="${key}">${esc(label)}</button>`;
-    if (f.sheet !== 'summary' && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = 'summary';
-    const pills = `<div class="toolbar">${pill('summary', 'Отчет')}${rep.sheets.map(x => pill(x.key, `${x.name} · ${x.rows.length}`)).join('')}</div>`;
+    if (!['summary', 'teachers', 'attendance'].includes(f.sheet) && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = 'summary';
+    const pills = `<div class="toolbar">${pill('summary', 'Отчет')}${rep.sheets.map(x => pill(x.key, `${x.name} · ${x.rows.length}`)).join('')}${pill('teachers', `По преподавателям · ${rep.byTeacher.length}`)}${pill('attendance', 'Посещаемость')}</div>`;
+    if (f.sheet === 'teachers') return pills + teachersView(rep, f);
+    if (f.sheet === 'attendance') return pills + attendanceView(rep.attendance, f);
     if (f.sheet === 'summary') {
       if (!rep.summary.length) return `${pills}<div class="card"><div class="empty">Нет доп. тестов за период</div></div>`;
       return pills + rep.summary.map(b => {
@@ -372,12 +382,43 @@
         <td><b>${r.total}</b> / ${r.max}</td><td class="${bandOf(r.pct)[2]}">${pct(r.pct)}</td></tr>`).join('')}
     </table></div></div>`;
   }
+  /** Выпадающий список преподавателей вкладки; field — где в state.exp хранится выбор, withAll — пункт «Все преподаватели». */
+  function teacherSelect(list, f, field, withAll) {
+    const option = (id, name) => `<option value="${esc(id)}" ${id === f[field] ? 'selected' : ''}>${esc(name)}</option>`;
+    return `<div class="toolbar"><select class="e-teacher" data-field="${field}">${withAll ? option('all', 'Все преподаватели') : ''}${list.map(t => option(t.id, t.name)).join('')}</select></div>`;
+  }
+  /** Тесты учеников → «По преподавателям»: ФИО ученика и средний % в колонке своего диапазона. */
+  function teachersView(rep, f) {
+    if (!rep.byTeacher.length) return '<div class="card"><div class="empty">Нет тестов за период</div></div>';
+    const select = teacherSelect(rep.byTeacher.map(t => ({ id: t.id, name: `${t.name} · ${t.rows.length}` })), f, 'teacher', false);
+    const t = rep.byTeacher.find(x => x.id === f.teacher);
+    return `${select}<div class="card"><div class="card-title">${esc(t.name)}</div><div class="tscroll"><table class="exp">
+      <tr><th class="left">ФИО ученика</th>${BANDS.map(([, label]) => `<th>${label}</th>`).join('')}</tr>
+      ${t.rows.map(r => `<tr><td class="left">${esc(r.student)}</td>${BANDS.map(([k, , cls]) => `<td class="${k === r.band ? cls : ''}">${k === r.band ? pct(r.pct) : ''}</td>`).join('')}</tr>`).join('')}
+      <tr><td class="left"><b>Учеников</b></td>${BANDS.map(([k]) => `<td><b>${t.rows.filter(r => r.band === k).length}</b></td>`).join('')}</tr>
+    </table></div></div>`;
+  }
+  /** Тесты учеников → «Посещаемость»: критерии и количество учеников — по преподавателю или по всем; ниже — ученики с пропусками. */
+  function attendanceView(att, f) {
+    const select = teacherSelect(att.scopes.slice(1), f, 'attTeacher', true);
+    const sc = att.scopes.find(x => x.id === f.attTeacher) || att.scopes[0];
+    return `${select}<div class="card"><div class="card-title">${esc(sc.name)} · учеников ${sc.students}</div><div class="tscroll"><table class="exp">
+      <tr><th class="left">Критерий</th><th>Кол-во</th></tr>
+      ${att.criteria.map(([key, label]) => `<tr><td class="left">${esc(label)}</td><td><b>${sc.counts[key]}</b></td></tr>`).join('')}
+    </table></div></div>
+    <div class="card"><div class="card-title">Ученики с пропусками · ${sc.rows.length}</div><div class="tscroll"><table class="exp">
+      <tr><th>№</th><th class="left">ФИО ученика</th><th class="left">Группа</th><th>Уроков</th><th>Пропусков</th><th>%</th></tr>
+      ${sc.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.student)}</td><td class="left">${esc(r.group)}</td><td>${r.lessons}</td><td>${r.absent}</td>
+        <td class="${r.rate >= 0.3 ? 'sev-crit' : r.rate >= 0.15 ? 'sev-warn' : ''}">${pct(r.rate)}</td></tr>`).join('')}
+    </table></div>${sc.rows.length ? '' : '<div class="empty">Пропусков за период нет</div>'}</div>`;
+  }
   on(root, 'click', '[data-act="exp-go"]', () => {
     const a = $('#e-from').value, b = $('#e-to').value;
     if (a && b) { Object.assign(state.exp, a <= b ? { from: a, to: b } : { from: b, to: a }, { go: true }); expCache = {}; show('export'); }
   });
   on(root, 'click', '[data-exp-kind]', el => { state.exp.kind = el.dataset.expKind; show('export'); });
   on(root, 'click', '[data-exp-sheet]', el => { state.exp.sheet = el.dataset.expSheet; show('export'); });
+  on(root, 'change', '.e-teacher', el => { state.exp[el.dataset.field] = el.value; show('export'); });
 
   /* ---------- КТП: категории и темы по уровням ---------- */
   // Колонки в порядке таблицы КТП — в этом же порядке вставляются строки из Excel.
@@ -495,7 +536,7 @@
           <dt>Доп. (персональный) тест</dt><dd>по желанию, не больше одного на урок · AddEditPersonalTestResult<br>${c.personalTests.map(cat => `<b>${esc(cat.name)}</b> (кат. ${cat.id}): ${cat.types.map(x => `${esc(x.name)} — тип ${x.id}: ${x.skills.map(k => `${esc(k.name)} (№${k.id}) 0–${k.max}`).join(', ')}`).join(' | ')}`).join('<br>')}</dd>
           <dt>Тест пишется для групп</dt><dd>${c.testing.edUnitIds.length ? esc(c.testing.edUnitIds.join(', ')) : 'для всех'} <span class="mut">HH_TEST_EDUNIT_IDS</span></dd>
           <dt>Тема урока (= комментарий в HollyHop)</dt><dd>обязательна при отправке результатов</dd>
-          <dt>Коины (поле ученика «Коины»)</dt><dd>ежедневный тест: (ДЗ + активность) × 2 · Progress Test, Final Test, Revise&Check, File Test NEF: 60–80 % → +10, от 80 % → +20</dd>
+          <dt>Коины (поле ученика «Коины»)</dt><dd>ежедневный тест: (ДЗ + активность) × 2 · Progress Test, Final Test, Revise&Check, File Test NEF, Quick Test NEF: 60–80 % → +10, от 80 % → +20</dd>
           <dt>Макс. длина комментария</dt><dd>${c.rules.commentMaxLen} <span class="mut">COMMENT_MAX_LEN</span></dd>
         </dl><p class="note" style="margin-top:12px">Тесты и комментарий — только для тех, кто был на уроке. Ежедневный тест обязателен (навык 8 всегда 45); доп. тест — по выбору преподавателя, баллы вводятся тем ученикам, кто его писал. Менять — в файле .env, затем перезапустить сервер.</p></div>
       <div class="card"><div class="card-title">Система</div>

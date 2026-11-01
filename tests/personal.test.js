@@ -17,12 +17,12 @@ after(() => api.close());
 beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissions'); });
 
 const save = (list, personal, topic = 'Unit 3') => api.request('POST', '/api/lessons',
-  { tg: TG, body: { key: h.uuid(), groupId: '31', date: h.WED, topic, personal, students: list } });
+  { tg: TG, body: { key: h.uuid(), groupId: '31', date: h.WED, topic, homework: 'Ex. 1', personal, students: list } });
 
-test('/me отдаёт 4 категории доп. теста', async () => {
+test('/me отдаёт 6 категорий доп. теста', async () => {
   const me = (await api.request('GET', '/api/me', { tg: TG })).json;
   assert.deepEqual(me.personalTests.map(c => [c.id, c.name, c.types.length]),
-    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3], [45, 'File Test NEF', 12]]);
+    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3], [45, 'File Test NEF', 12], [2, 'Quick Test NEF', 1]]);
 });
 
 test('Progress Test пишется тем, кому введены баллы; остальным — только ежедневный', async () => {
@@ -36,7 +36,7 @@ test('Progress Test пишется тем, кому введены баллы; �
   assert.equal(h.mock.state.personal.length, 1);
   assert.deepEqual(h.mock.state.personal[0], {
     studentClientId: 3101, dateTime: `${h.WED}T09:00:00`, discipline: 'Английский', teacherId: 101, testTypeId: 1,
-    skills: [1, 2, 3, 4, 5, 6, 7, 21].map(id => ({ skillId: id, score: PROGRESS[id] })), commentHtml: 'Unit 3 &amp; 4',
+    skills: [1, 2, 3, 4, 5, 6, 7, 21].map(id => ({ skillId: id, score: PROGRESS[id] })), commentHtml: 'Unit 3 &amp; 4<br>Дз/Hw: Ex. 1',
   });
   const card = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG })).json.find(g => g.id === '31');
   assert.equal(card.total, 9); assert.equal(card.done, 9);                    // тема + 3 посещаемости + 2 ежедневных + 1 доп. + 2 коина
@@ -86,7 +86,7 @@ test('ежедневный тест обязателен и при выбран�
 test('сбой доп. теста → «частично», досылка пишет только его', async () => {
   for (let i = 0; i < 5; i++) h.mock.failNext('AddEditPersonalTestResult', { status: 502, when: p => p.testTypeId === 1 });   // только доп. тест
   const key = h.uuid();
-  const res = await api.request('POST', '/api/lessons', { tg: TG, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', personal: { categoryId: 1, testTypeId: 1 },
+  const res = await api.request('POST', '/api/lessons', { tg: TG, body: { key, groupId: '31', date: h.WED, topic: 'Unit 1', homework: 'Ex. 1', personal: { categoryId: 1, testTypeId: 1 },
     students: [{ id: '3101', status: 'present', skills: DAILY, personalSkills: PROGRESS }] } });
   assert.equal(res.json.status, 'partial');
   assert.equal((await require('../src/services/submissionService').push(key)).status, 'done');

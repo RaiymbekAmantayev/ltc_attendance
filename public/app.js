@@ -290,7 +290,7 @@
     try {
       const { students, submitted, ktp } = await cached(`roster:${groupId}:${date}`, () => api(`/groups/${groupId}/students?date=${date}`));
       const queuedItem = queue.all().find(p => p.groupId === groupId && p.date === date);
-      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, ktpTopicId: queuedItem.ktpTopicId, personal: queuedItem.personal, students: queuedItem.students });
+      const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, homework: queuedItem.homework, ktpTopicId: queuedItem.ktpTopicId, personal: queuedItem.personal, students: queuedItem.students });
       state.ktp = ktp || null;
       const readOnly = !!saved;
       const byId = id => saved?.students.find(s => s.id === id) || {};
@@ -308,6 +308,7 @@
           <input type="text" id="topic" class="field" placeholder="${esc(t.topic)}" maxlength="500" value="${esc(saved?.topic || '')}">
           ${personalBlock(saved)}
           ${students.map(s => studentCard(s, byId(s.id), readOnly)).join('')}
+          <textarea id="homework" class="field" rows="2" placeholder="${esc(t.homework)}" maxlength="${state.me.rules.homeworkMaxLen || 500}">${esc(saved?.homework || '')}</textarea>
         </fieldset>
         ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(t.save)}</button></div>`}`;
       $$('.scard').forEach(card => paintPersonal(card, byId(card.dataset.student).personalSkills));
@@ -322,6 +323,7 @@
     const t = T(), rules = state.me.rules, config = skillsOf();
     const topic = $('#topic').value.trim();                // тема урока = комментарий в HollyHop
     if (rules.commentRequired && !topic) return { error: t.needTopic, card: $('#topic') };
+    if (rules.homeworkRequired && !$('#homework').value.trim()) return { error: t.needHomework, card: $('#homework') };
     const choice = personalChoice();
     if (choice && !choice.type) return { error: t.needPersonalType, card: $('#ptype') };
     const personal = choice && { categoryId: choice.category.id, testTypeId: choice.type.id };
@@ -385,7 +387,7 @@
       LTC.modal.close();
       const g = state.group;
       queue.add({                                              // сначала в память телефона, затем отправка
-        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(), ktpTopicId: Number($('#ktp')?.value) || null, personal: result.personal,
+        key: uuid(), groupId: g.id, groupName: g.name, date: state.date, topic: $('#topic').value.trim(), homework: $('#homework').value.trim(), ktpTopicId: Number($('#ktp')?.value) || null, personal: result.personal,
         students: result.students.map(({ name, ...s }) => s),
       });
       await flush();
@@ -458,6 +460,7 @@
   on(root, 'change', '#ktp', el => {
     const x = ktpTopic(el.value);
     if (x) $('#topic').value = x.title.slice(0, 500);
+    if (x?.homework && !$('#homework').value.trim()) $('#homework').value = x.homework;   // ДЗ из КТП — подсказка, можно исправить
     paintKtpInfo();
   });
   on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
