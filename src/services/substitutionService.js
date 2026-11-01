@@ -38,5 +38,27 @@ exports.busyTeachers = async (groupId, date) => {
   return busy;
 };
 
+/** Группы с ФИО основного преподавателя: из расписания HollyHop, иначе — из реестра по HollyHop ID. */
+exports.withMainTeacher = async groups => {
+  const missing = groups.some(g => !g.teacher && g.teacherId);
+  const byHollihopId = missing
+    ? new Map((await Teacher.findAll()).filter(t => t.hollihop_id).map(t => [String(t.hollihop_id), t.full_name])) : new Map();
+  return groups.map(g => ({ ...g, teacher: g.teacher || byHollihopId.get(g.teacherId) || '' }));
+};
+
+/** Последние замены с группой из HollyHop: название, филиал, уровень и кого заменяют (replaces). */
+exports.recent = async () => {
+  const subs = await Substitution.findRecent();
+  const ids = [...new Set(subs.map(s => String(s.group_id)))], found = [];
+  for (let i = 0; i < ids.length; i += 4) {
+    found.push(...await Promise.all(ids.slice(i, i + 4).map(id => hollihop.groupById(id).catch(() => null))));
+  }
+  const groups = new Map((await exports.withMainTeacher(found.filter(Boolean))).map(g => [g.id, g]));
+  return subs.map(s => {
+    const g = groups.get(String(s.group_id));
+    return { ...s, group_name: g?.name || null, branch: g?.branch || '', level: g?.level || '', replaces: g?.teacher || '' };
+  });
+};
+
 /** Текст причины: «занят 10:00–11:30 · English Elementary A1». */
 exports.busyText = list => 'занят ' + list.map(x => `${x.time} · ${x.group}`).join('; ');

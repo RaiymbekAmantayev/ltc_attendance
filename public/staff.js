@@ -16,6 +16,8 @@
   state.groupsDate = LTC.localToday();
   state.filter = 'all';
   state.query = '';
+  state.branch = '';
+  state.level = '';
 
   const periodBar = () => {
     const t = T(), p = state.period;
@@ -109,7 +111,7 @@
           <span class="chip ${statusTag(g.status)}">${esc(t.status[g.status])}</span>
           ${g.lowFill ? `<span class="chip bad">${esc(fmtLow())}</span>` : ''}
           ${g.overfull ? `<span class="chip warn">${esc(t.overfull)}</span>` : ''}
-          ${g.substitute ? `<span class="chip brand">${esc(t.substitution)}: ${esc(g.substitute)}</span>` : ''}
+          ${g.substitute ? `<span class="chip brand">${esc(t.substitution)}: ${esc(g.substitute)}${g.replaces ? ' · ' + esc(A.fmt(t.replacesFor, { name: g.replaces })) : ''}</span>` : ''}
         </div>
       </button>`;
   };
@@ -118,12 +120,24 @@
   const filteredGroups = () => {
     const q = state.query.trim().toLowerCase();
     return groupsCache.filter(g =>
-      (!q || [g.name, g.branch, g.teacher].join(' ').toLowerCase().includes(q)) &&
+      (!q || [g.name, g.branch, g.teacher, g.substitute].join(' ').toLowerCase().includes(q)) &&
+      (!state.branch || g.branch === state.branch) && (!state.level || g.level === state.level) &&
       (state.filter === 'all' || (state.filter === 'unmarked' && g.status === 'none') || (state.filter === 'low' && g.lowFill)));
   };
   const paintGroups = () => {
     const list = filteredGroups();
     $('#glist').innerHTML = list.length ? list.map(groupCard).join('') : `<div class="empty">${esc(T().noLessons)}</div>`;
+  };
+
+  /** Фильтры филиала и уровня — из групп дня; выбранного нет в этот день — сбрасывается. */
+  const paintGroupFilters = () => {
+    const t = T(), uniq = list => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+    const branches = uniq(groupsCache.map(g => g.branch)), levels = uniq(groupsCache.map(g => g.level));
+    if (!branches.includes(state.branch)) state.branch = '';
+    if (!levels.includes(state.level)) state.level = '';
+    const select = (id, all, list, value) => `<select id="${id}" class="grow"><option value="">${esc(all)}</option>${list.map(v =>
+      `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
+    $('#gfilters').innerHTML = select('gbranch', t.allBranches, branches, state.branch) + select('glevel', t.allLevels, levels, state.level);
   };
 
   A.views.groups = async view => {
@@ -137,12 +151,14 @@
         ${state.groupsDate !== today ? `<button class="pill" data-act="gtoday">${esc(t.today)}</button>` : ''}
       </div>
       <input type="search" id="gq" class="field" placeholder="${esc(t.search)}" value="${esc(state.query)}" style="margin-bottom:10px">
+      <div class="row" id="gfilters" style="margin-bottom:10px"></div>
       <div class="pills" style="margin-bottom:12px">
         ${[['all', t.all], ['unmarked', t.notMarkedF], ['low', t.lowFillF]].map(([id, label]) => `<button class="pill ${state.filter === id ? 'active' : ''}" data-filter="${id}">${esc(label)}</button>`).join('')}
         <button class="btn ghost sm" data-act="csv-groups" style="margin-left:auto">📥 CSV</button>
       </div>
       <div id="glist">${LTC.loader}</div>`;
     groupsCache = await A.api('/dash/groups?date=' + state.groupsDate);
+    paintGroupFilters();
     paintGroups();
   };
 
@@ -150,6 +166,8 @@
   on(root, 'click', '[data-act="gtoday"]', () => { state.groupsDate = LTC.localToday(); rerender(); });
   on(root, 'change', '#gdate', el => { if (el.value) { state.groupsDate = el.value; rerender(); } });
   on(root, 'input', '#gq', el => { state.query = el.value; paintGroups(); });
+  on(root, 'change', '#gbranch', el => { state.branch = el.value; paintGroups(); });
+  on(root, 'change', '#glevel', el => { state.level = el.value; paintGroups(); });
   on(root, 'click', '[data-filter]', el => {
     state.filter = el.dataset.filter;
     $$('[data-filter]').forEach(b => b.classList.toggle('active', b === el));
@@ -157,8 +175,8 @@
   });
   on(root, 'click', '[data-act="csv-groups"]', () => {
     LTC.csv(`LTC_groups_${state.groupsDate}.csv`,
-      ['Группа', 'Филиал', 'Уровень', 'Дисциплина', 'Время', 'Дни', 'Преподаватель', 'Учеников', 'Вакансий', 'Статус отметки', 'Убыточная', 'Замена'],
-      filteredGroups().map(g => [g.name, g.branch, g.level, g.discipline, g.time, g.days, g.teacher, g.students, g.vacancies, g.status, g.lowFill ? 'да' : '', g.substitute || '']));
+      ['Группа', 'Филиал', 'Уровень', 'Дисциплина', 'Время', 'Дни', 'Преподаватель', 'Учеников', 'Вакансий', 'Статус отметки', 'Убыточная', 'Замена', 'Кого заменяют'],
+      filteredGroups().map(g => [g.name, g.branch, g.level, g.discipline, g.time, g.days, g.teacher, g.students, g.vacancies, g.status, g.lowFill ? 'да' : '', g.substitute || '', g.replaces || '']));
   });
 
   /* Карточка группы: состав, посещаемость, замена */

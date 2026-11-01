@@ -169,7 +169,9 @@ test('замена на дату открывает группу заменяю�
   assert.equal(before.status, 403);
   await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9002', lesson_date: h.WED, substitute_id: t1 } });
   const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
-  assert.ok(lessons.find(g => g.id === '9002' && g.substitution));
+  assert.equal(lessons.find(g => g.id === '9002' && g.substitution).replaces, 'Смит John', 'заменяющий видит, кого заменяет');
+  const groups = (await api.request('GET', `/admin-api/groups?date=${h.WED}`, { admin: true })).json;
+  assert.deepEqual(groups.find(g => g.id === '9001'), { id: '9001', name: 'English Elementary A1', branch: 'Абая', time: '10:00–11:30', level: 'Elementary', teacher: 'Иванова Анна' });
   const list = (await api.request('GET', `/api/groups/9002/students?date=${h.WED}`, { tg: TG.teacher })).json.students.map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   const saved = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9002', list) });
   assert.equal(saved.json.status, 'done');

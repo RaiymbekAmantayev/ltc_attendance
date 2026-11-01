@@ -58,9 +58,10 @@ exports.importTeachers = async (req, res) => {
 // ── Замены ──
 exports.listGroups = async (req, res) => {
   const date = lessons.isDate(req.query.date) ? req.query.date : lessons.todayIso();
-  res.json((await hollihop.groupsOnDate(date)).map(({ id, name, branch, time }) => ({ id, name, branch, time })));
+  const groups = await substitutionService.withMainTeacher(await hollihop.groupsOnDate(date));
+  res.json(groups.map(({ id, name, branch, time, level, teacher }) => ({ id, name, branch, time, level, teacher })));
 };
-exports.listSubstitutions = async (req, res) => res.json(await Substitution.findRecent());
+exports.listSubstitutions = async (req, res) => res.json(await substitutionService.recent());
 
 /** Кто занят во время занятия группы: { teacherId: [{groupId, group, time}] }. */
 exports.busyTeachers = async (req, res) => {
@@ -88,15 +89,15 @@ exports.removeSubstitution = async (req, res) => {
 
 // ── Выгрузка: расписание (HollyHop), отметки, тесты и отчёты по ученикам за период; ?format=xlsx — файл Excel (&teacher= — преподаватель) ──
 exports.exportReport = async (req, res) => {
-  const { kind } = req.params, { from, to, format, teacher, attendanceTeacher } = req.query;
+  const { kind } = req.params, { from, to, format, resultsTeacher, attendanceTeacher } = req.query;
   if (!exportService.KINDS[kind]) throw new AppError(404, 'Нет такой выгрузки');
-  const report = await exportService[kind](from, to);
+  const report = await exportService[kind](from, to, req.query);
   if (format !== 'xlsx') return res.json(report);
   res.set({
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition': `attachment; filename="${exportService.fileName(report)}"`,
   });
-  res.send(exportService.toXlsx(report, { teacher, attendanceTeacher }));
+  res.send(exportService.toXlsx(report, { resultsTeacher, attendanceTeacher }));
 };
 
 // ── Отметки и аудит ──

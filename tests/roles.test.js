@@ -63,6 +63,7 @@ test('координатор назначает замену из мини-ап�
   const add = await api.request('POST', '/api/dash/substitutions', { tg: TG.coord, body: { group_id: '9002', lesson_date: todayIso(), substitute_id: t1 } });   // список — замены за последние 7 дней, поэтому не фиксированная дата
   assert.equal(add.status, 200);
   const list = (await api.request('GET', '/api/dash/substitutions', { tg: TG.coord })).json;
-  assert.ok(list.find(s => s.group_id === '9002'));
+  assert.deepEqual((({ group_name, branch, level, replaces }) => ({ group_name, branch, level, replaces }))(list.find(s => s.group_id === '9002')),
+    { group_name: 'English Pre-Intermediate B1', branch: 'Хайвилл', level: 'Pre-Intermediate', replaces: 'Смит John' });
   assert.equal((await api.request('POST', '/api/dash/substitutions', { tg: TG.coord, body: { group_id: '9002', lesson_date: 'bad', substitute_id: t1 } })).status, 400);
 });

@@ -31,20 +31,31 @@ async function lookupGroups(rows, { names, levels: groupLevels }) {
   }
 }
 
-/** Отчёт за период: { kind, from, to, summary, sheets }. Период проверяет вызывающий. */
-exports.report = async (from, to) => {
+const NONE = '—';
+/** Уровень группы отметки: из payload, у старых — из HollyHop (found.levels). */
+const levelOfRow = (r, found) => levelOf(r.payload.level || found.levels.get(r.group_id));
+/** Фильтр отметок по филиалу, уровню группы и преподавателю (пусто — все); без филиала — «—». */
+const matcher = ({ branch, level, teacher } = {}) => (r, found) =>
+  (!branch || (r.branch || NONE) === branch) && (!teacher || String(r.teacher_id) === String(teacher)) && (!level || levelOfRow(r, found) === level);
+
+/** Отчёт за период: { kind, from, to, summary, sheets, filters, options }. filters — { branch, level, teacher }; период проверяет вызывающий. */
+exports.report = async (from, to, filters = {}) => {
   const found = { names: new Map(), levels: new Map() };
+  const match = matcher(filters);
+  const options = { branches: new Set(), levels: new Set(), teachers: new Map() };   // что есть за период — для фильтров
   const personal = new Map();                            // categoryId → лист
   const daily = new Map();                               // ученик + группа + преподаватель → строка средних
   for (let afterId = 0, page; (page = await Submission.pageForTests(from, to, afterId, PAGE)).length; afterId = page[page.length - 1].id) {
-    const rows = page.map(r => ({ ...r, payload: Submission.parse(r.payload) }))
-      .filter(r => r.payload.students.some(s => s.skills || s.personalSkills));
+    const rows = page.map(r => ({ ...r, payload: Submission.parse(r.payload) }));
     await lookupGroups(rows, found);
-    for (const r of rows) collect(r);
+    for (const r of rows) {
+      options.branches.add(r.branch || NONE); options.levels.add(levelOfRow(r, found)); options.teachers.set(String(r.teacher_id), r.full_name);
+      if (match(r, found) && r.payload.students.some(s => s.skills || s.personalSkills)) collect(r);
+    }
   }
 
   function collect(r) {
-    const p = r.payload, level = levelOf(p.level || found.levels.get(r.group_id));
+    const p = r.payload, level = levelOfRow(r, found);
     const date = typeof r.lesson_date === 'string' ? r.lesson_date.slice(0, 10) : r.lesson_date.toISOString().slice(0, 10);
     const choice = p.personal && personalTests.find(p.personal.categoryId, p.personal.testTypeId);
     const dailySkills = (testing.skillsByType[p.testTypeId] || testing.skillsByType[testing.testTypeIds.local]).filter(k => !k.fixed);
@@ -118,12 +129,22 @@ exports.report = async (from, to) => {
     return { key: s.key, name: s.name, levels: [...byLevel.values()].sort((a, b) => levelRank(a.level) - levelRank(b.level) || a.level.localeCompare(b.level)) };
   });
 
-  return { kind: 'tests', title: 'Тесты учеников', from, to, summary, sheets };
+  const sortRu = list => list.sort((a, b) => a.localeCompare(b, 'ru'));
+  return {
+    kind: 'tests', title: 'Тесты учеников', from, to, summary, sheets,
+    filters: { branch: filters.branch || '', level: filters.level || '', teacher: filters.teacher ? String(filters.teacher) : '' },
+    options: {
+      branches: sortRu([...options.branches]),
+      levels: [...options.levels].sort((a, b) => levelRank(a) - levelRank(b) || a.localeCompare(b)),
+      teachers: [...options.teachers].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    },
+  };
 };
 
 exports.BANDS = BANDS;
 exports.bandOf = bandOf;
 exports.lookupGroups = lookupGroups;
+exports.matcher = matcher;
 exports.ruDate = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 exports.PCT_STYLE = { good: 'pctGood', mid: 'pctMid', bad: 'pctBad' };
 

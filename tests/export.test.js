@@ -149,7 +149,7 @@ test('тесты → по преподавателям и посещаемост
 
   const auth = { headers: { authorization: 'Basic ' + Buffer.from('admin:secret').toString('base64') } };
   const xlsxOf = async url => unzip(Buffer.from(await (await fetch(`${api.base}/admin-api/export/${url}&format=xlsx`, auth)).arrayBuffer()));
-  const resFile = await xlsxOf(`tests?${range}&teacher=${local}`);
+  const resFile = await xlsxOf(`tests?${range}&resultsTeacher=${local}`);
   assert.match(resFile['xl/workbook.xml'], /name="Отчет".*name="Progress Test".*name="Daily test".*name="По преподавателям"/);
   const byTeacher = resFile['xl/worksheets/sheet4.xml'];
   assert.match(byTeacher, /01\.09\.2026 — 20\.09\.2026 · Иванова Анна.*ФИО ученика.*≥80%.*70–79%.*&lt;70%.*Аня.*s="6"><v>0\.9<\/v>.*<f>COUNT\(B4:B6\)<\/f>/s);
@@ -160,4 +160,14 @@ test('тесты → по преподавателям и посещаемост
   assert.match(attFile['xl/worksheets/sheet5.xml'], /Все преподаватели.*Критерий.*Кол-во.*1 пропуск.*2 пропуска.*≥15% пропусков.*≥30% пропусков.*≥50% пропусков/s);
   assert.match(attFile['xl/worksheets/sheet6.xml'], /Боря.*G1.*Вика/s);
   assert.match((await xlsxOf(`tests?${range}&attendanceTeacher=${foreign}`))['xl/worksheets/sheet5.xml'], /Smith John/);
+
+  // Фильтры: преподаватель, филиал, уровень — на всех вкладках; варианты фильтров — за весь период.
+  assert.deepEqual(res.options.teachers.map(t => t.name), ['Иванова Анна', 'Smith John']);
+  assert.deepEqual([res.options.branches, res.options.levels], [['—'], ['—']]);           // без филиала и уровня в отметке и в HollyHop
+  const onlySmith = (await get(`/admin-api/export/tests?${range}&teacher=${foreign}`)).json;
+  assert.deepEqual([onlySmith.byTeacher, onlySmith.sheets.length, onlySmith.filters.teacher], [[], 0, String(foreign)]);
+  assert.deepEqual([onlySmith.attendance.scopes[0].students, onlySmith.attendance.scopes[0].counts.one], [2, 2]);   // Аня и Вика — по пропуску у Smith
+  const abaya = (await get(`/admin-api/export/tests?${range}&branch=${encodeURIComponent('Абая')}`)).json;
+  assert.deepEqual([abaya.byTeacher.length, abaya.attendance.scopes[0].students, abaya.options.teachers.length], [0, 0, 2]);
+  assert.equal((await get(`/admin-api/export/tests?${range}&level=${encodeURIComponent('—')}`)).json.byTeacher.length, 1);
 });

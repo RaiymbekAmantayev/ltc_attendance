@@ -4,6 +4,7 @@ const stats = require('../services/statsService');
 const lessons = require('../services/lessonService');
 const Teacher = require('../models/teacherModel');
 const Substitution = require('../models/substitutionModel');
+const substitutionService = require('../services/substitutionService');
 const Audit = require('../models/auditModel');
 const { AppError } = require('../middleware/errorHandler');
 const { period } = require('../lib/date');
@@ -26,7 +27,7 @@ exports.teachers = async (req, res) => res.json(await stats.teachers(range(req))
 exports.staff = async (req, res) => res.json((await Teacher.findActive())
   .filter(t => t.role === 'teacher' && t.hollihop_id).map(t => ({ id: t.id, name: t.full_name, branch: t.branch })));
 
-exports.substitutions = async (req, res) => res.json(await Substitution.findRecent());
+exports.substitutions = async (req, res) => res.json(await substitutionService.recent());
 
 exports.addSubstitution = async (req, res) => {
   const { group_id, lesson_date, substitute_id } = req.body || {};

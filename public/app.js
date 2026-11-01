@@ -167,7 +167,7 @@
         </div>
         <div class="tags">
           <span class="chip ${STATUS_CHIP[status] || ''}">${esc(t.status[status])}</span>
-          ${l.substitution ? `<span class="chip brand">${esc(t.substitution)}</span>` : ''}
+          ${l.substitution ? `<span class="chip brand">${esc(t.substitution)}${l.replaces ? ' · ' + esc(fmt(t.replacesFor, { name: l.replaces })) : ''}</span>` : ''}
           ${(status === 'partial' || status === 'attention') && l.total ? `<span class="chip">${esc(fmt(t.written, l))}</span>` : ''}
         </div>
       </button>`;

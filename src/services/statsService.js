@@ -3,6 +3,7 @@ const hollihop = require('./hollihopService');
 const Submission = require('../models/submissionModel');
 const Substitution = require('../models/substitutionModel');
 const Teacher = require('../models/teacherModel');
+const substitutionService = require('./substitutionService');
 const { lowFillThreshold } = require('../config/env');
 const { todayIso, addDays, localDayOf, monthStart } = require('../lib/date');
 
@@ -113,7 +114,7 @@ exports.todayBoard = async (date = todayIso()) => {
 
 exports.groups = async date => {
   const [groups, summary, subs] = await Promise.all([
-    hollihop.groupsOnDate(date), Submission.list({ date }), Substitution.forDate(date),
+    hollihop.groupsOnDate(date).then(substitutionService.withMainTeacher), Submission.list({ date }), Substitution.forDate(date),
   ]);
   const byGroup = new Map(summary.map(r => [r.group_id, r]));
   const subBy = new Map(subs.map(s => [String(s.group_id), s.full_name]));
@@ -125,6 +126,7 @@ exports.groups = async date => {
       overfull: g.vacancies != null && g.vacancies < 0,
       status: sub?.status || 'none',
       substitute: subBy.get(g.id) || null,
+      replaces: subBy.has(g.id) ? g.teacher || null : null,                // кого заменяют
     };
   });
 };

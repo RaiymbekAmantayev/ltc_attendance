@@ -1,6 +1,7 @@
 const hollihop = require('./hollihopService');
 const Substitution = require('../models/substitutionModel');
 const Submission = require('../models/submissionModel');
+const { withMainTeacher } = require('./substitutionService');
 const { isDate, todayIso } = require('../lib/date');
 
 exports.isDate = isDate;
@@ -11,8 +12,8 @@ async function groupsForTeacher(teacher, date) {
   const own = teacher.hollihop_id ? await hollihop.teacherGroups(teacher.hollihop_id, date) : [];
   const ownIds = new Set(own.map(g => g.id));
   const substituteIds = teacher.id ? await Substitution.groupIdsForTeacher(teacher.id, date) : [];
-  const substitutes = (await Promise.all(substituteIds.filter(id => !ownIds.has(String(id))).map(hollihop.groupById)))
-    .filter(Boolean).map(g => ({ ...g, substitution: true }));
+  const substitutes = (await withMainTeacher((await Promise.all(substituteIds.filter(id => !ownIds.has(String(id))).map(hollihop.groupById)))
+    .filter(Boolean))).map(g => ({ ...g, substitution: true, replaces: g.teacher || null }));   // replaces — кого заменяет
   return [...own, ...substitutes];
 }
 

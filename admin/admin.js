@@ -14,7 +14,7 @@
     ktp_topic_add: 'КТП: тема добавлена', ktp_topic_update: 'КТП: тема изменена', ktp_topic_remove: 'КТП: тема удалена', ktp_import: 'КТП: вставка из Excel',
   };
   const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
-  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
+  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '', branch: '', level: '', teacher: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
@@ -23,6 +23,12 @@
   const personalLabel = p => (p.personal ? `${PERSONAL_CATS[p.personal.categoryId] || p.personal.categoryId} (тип ${p.personal.testTypeId})` : '');
   const personalScores = s => (s.personalSkills ? Object.entries(s.personalSkills).map(([k, v]) => `${PERSONAL_SKILLS[k] || '№' + k}: ${v}`).join(' · ') : '—');
   const parse = v => (typeof v === 'string' ? JSON.parse(v) : v);
+  /** <select> фильтра: values — [значение, подпись] или строки; пустое значение — «все». */
+  const filterSelect = (id, all, values, value, attrs = '') => `<select id="${id}" ${attrs}><option value="">${esc(all)}</option>${values.map(v => {
+    const [val, label] = Array.isArray(v) ? v : [v, v];
+    return `<option value="${esc(val)}" ${String(val) === String(value) ? 'selected' : ''}>${esc(label)}</option>`;
+  }).join('')}</select>`;
+  const uniq = list => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
 
   async function api(path, { method = 'GET', body } = {}) {
     const res = await fetch('/admin-api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -184,7 +190,8 @@
 
   /* ---------- Замены ---------- */
   // Кто занят во время выбранного занятия: { teacherId: [{group, time}] } — такого назначить нельзя.
-  let subTeachers = [], busy = {};
+  let subTeachers = [], busy = {}, subGroups = [];
+  state.subsF = { branch: '', level: '' };
   const busyText = list => 'занят ' + list.map(x => `${x.time} · ${x.group}`).join('; ');
   views.subs = async () => {
     const [all, subs] = await Promise.all([api('/teachers'), api('/substitutions')]);
@@ -193,27 +200,51 @@
     main.innerHTML = `
       <div class="card"><div class="card-title">Замена на дату</div>
         <p class="hint">Заменяющий увидит группу только в этот день. В журнале фиксируется реальный автор отметки.</p>
-        <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow"></select>
+        <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><span id="s-filters" class="row"></span></div>
+        <div class="toolbar"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow"></select>
         <button class="btn" data-act="add-sub">Назначить</button></div>
+        <div id="s-main" class="hint"></div>
         <div id="s-busy" class="err" hidden></div></div>
       <div class="card"><div class="card-title">Последние замены</div>
-        ${subs.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа (ID)</th><th class="left">Заменяет</th><th></th></tr>
-          ${subs.map(x => `<tr><td>${esc(x.lesson_date)}</td><td class="left">${esc(x.group_id)}</td><td class="left">${esc(x.full_name)}</td><td class="act"><button class="btn ghost sm" data-rm-sub="${x.id}">Убрать</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Замен нет</div>'}</div>`;
+        ${subs.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа</th><th class="left">Филиал · уровень</th><th class="left">Кого заменяют</th><th class="left">Заменяет</th><th></th></tr>
+          ${subs.map(x => `<tr><td>${esc(x.lesson_date)}</td><td class="left">${esc(x.group_name || x.group_id)}<br><span class="mut">${esc(x.group_id)}</span></td>
+            <td class="left">${esc([x.branch, x.level].filter(Boolean).join(' · ') || '—')}</td><td class="left">${esc(x.replaces || '—')}</td><td class="left">${esc(x.full_name)}</td>
+            <td class="act"><button class="btn ghost sm" data-rm-sub="${x.id}">Убрать</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Замен нет</div>'}</div>`;
     loadGroups();
   };
   async function loadGroups() {
     const select = $('#s-group'); if (!select) return;
     select.innerHTML = '<option>загрузка…</option>';
-    try {
-      const groups = await api('/groups?date=' + $('#s-date').value);
-      select.innerHTML = groups.length ? groups.map(g => `<option value="${esc(g.id)}">${esc(g.name)} · ${esc(g.branch)} ${esc(g.time)}</option>`).join('') : '<option value="">в этот день занятий нет</option>';
-    } catch (e) { select.innerHTML = `<option value="">${esc(e.message)}</option>`; }
+    try { subGroups = await api('/groups?date=' + $('#s-date').value); }
+    catch (e) { subGroups = []; select.innerHTML = `<option value="">${esc(e.message)}</option>`; return loadBusy(); }
+    const f = state.subsF;
+    if (f.branch && !subGroups.some(g => g.branch === f.branch)) f.branch = '';
+    if (f.level && !subGroups.some(g => g.level === f.level)) f.level = '';
+    $('#s-filters').innerHTML = filterSelect('s-branch', 'Все филиалы', uniq(subGroups.map(g => g.branch)), f.branch)
+      + filterSelect('s-level', 'Все уровни', uniq(subGroups.map(g => g.level)), f.level);
+    paintSubGroups();
+  }
+  /** Группы дня по фильтрам филиала и уровня; в подписи — основной преподаватель (кого заменяют). */
+  function paintSubGroups() {
+    const select = $('#s-group'); if (!select) return;
+    const f = state.subsF, chosen = select.value;
+    const list = subGroups.filter(g => (!f.branch || g.branch === f.branch) && (!f.level || g.level === f.level));
+    select.innerHTML = list.length
+      ? list.map(g => `<option value="${esc(g.id)}">${esc([g.name, g.branch, g.level, g.time].filter(Boolean).join(' · '))}${g.teacher ? ` — ${esc(g.teacher)}` : ''}</option>`).join('')
+      : `<option value="">${subGroups.length ? 'нет групп по фильтру' : 'в этот день занятий нет'}</option>`;
+    if (list.some(g => g.id === chosen)) select.value = chosen;
     loadBusy();
+  }
+  /** Под списком: кого заменяют в выбранной группе. */
+  function paintMain() {
+    const box = $('#s-main'), g = subGroups.find(x => x.id === $('#s-group')?.value);
+    if (box) box.textContent = g ? `Заменяют: ${g.teacher || 'преподаватель не указан в HollyHop'}` : '';
   }
   /** Занятость преподавателей на время выбранной группы: занятые помечены красным в списке. */
   async function loadBusy() {
     const select = $('#s-teacher'); if (!select) return;
     const group = $('#s-group').value, date = $('#s-date').value, chosen = select.value;
+    paintMain();
     busy = {};
     if (group) {
       try { busy = await api(`/substitutions/busy?date=${date}&group=${encodeURIComponent(group)}`); }
@@ -235,6 +266,8 @@
     $('[data-act="add-sub"]').disabled = !!list;
   }
   on(root, 'change', '#s-date', loadGroups);
+  on(root, 'change', '#s-branch', el => { state.subsF.branch = el.value; paintSubGroups(); });
+  on(root, 'change', '#s-level', el => { state.subsF.level = el.value; paintSubGroups(); });
   on(root, 'change', '#s-group', loadBusy);
   on(root, 'change', '#s-teacher', paintBusy);
   on(root, 'click', '[data-act="add-sub"]', async () => {
@@ -246,21 +279,29 @@
 
   /* ---------- Отметки ---------- */
   let submissions = [];
+  const levelOf = x => parse(x.payload).level || '—', branchOf = x => x.branch || '—';   // старые отметки — без уровня
   views.subm = async () => {
     const f = state.subm;
     if (!f.from) { f.from = LTC.addDays(LTC.localToday(), -6); f.to = LTC.localToday(); }
     const params = new URLSearchParams({ from: f.from, to: f.to, status: f.status });
-    submissions = await api('/submissions?' + params);
+    const all = await api('/submissions?' + params);
+    // Филиал, уровень и преподаватель — фильтры по загруженному периоду (и для таблицы, и для Excel).
+    const teachers = [...new Map(all.map(x => [String(x.teacher_id), x.full_name])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'ru'));
+    submissions = all.filter(x => (!f.branch || branchOf(x) === f.branch) && (!f.level || levelOf(x) === f.level) && (!f.teacher || String(x.teacher_id) === f.teacher));
     main.innerHTML = `
       <div class="toolbar">
         <input type="date" id="m-from" value="${f.from}"><span class="mut">—</span><input type="date" id="m-to" value="${f.to}">
         <select id="m-status"><option value="">Все статусы</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${esc(v[1])}</option>`).join('')}</select>
+        ${filterSelect('m-branch', 'Все филиалы', uniq([...all.map(branchOf), f.branch]), f.branch)}
+        ${filterSelect('m-level', 'Все уровни', uniq([...all.map(levelOf), f.level]), f.level)}
+        ${filterSelect('m-teacher', 'Все преподаватели', teachers, f.teacher)}
         <span class="mut">${submissions.length} записей</span>
         <button class="btn ghost sm" data-act="xlsx-subm" style="margin-left:auto">📥 Excel</button>
       </div>
-      <div class="card"><div class="tscroll"><table><tr><th>Занятие</th><th class="left">Группа</th><th class="left">Автор</th><th class="left">Статус</th><th class="left">Данные</th><th></th></tr>
+      <div class="card"><div class="tscroll"><table><tr><th>Занятие</th><th class="left">Группа</th><th class="left">Филиал · уровень</th><th class="left">Автор</th><th class="left">Статус</th><th class="left">Данные</th><th></th></tr>
         ${submissions.map((x, i) => { const p = parse(x.payload); return `<tr><td>${esc(x.lesson_date)}</td>
-          <td class="left">${esc(x.group_name || x.group_id)}<br><span class="mut">${esc(x.group_id)}</span></td><td class="left">${esc(x.full_name)}</td>
+          <td class="left">${esc(x.group_name || x.group_id)}<br><span class="mut">${esc(x.group_id)}</span></td>
+          <td class="left">${esc(branchOf(x))}<br><span class="mut">${esc(levelOf(x))}</span></td><td class="left">${esc(x.full_name)}</td>
           <td class="left">${chip(x.status)}${x.last_error ? `<br><span class="mut">${esc(x.last_error)}</span>` : ''}</td>
           <td class="left"><button class="btn ghost sm" data-detail="${i}">${p.students.length} уч.${p.topic ? ' · ' + esc(p.topic.slice(0, 24)) : ''}</button></td>
           <td class="act">${x.status !== 'done' ? `<button class="btn sm" data-retry="${esc(x.idem_key)}">Повторить</button>` : ''}</td></tr>`; }).join('')}</table></div>
@@ -269,6 +310,9 @@
   on(root, 'change', '#m-from', el => { state.subm.from = el.value; show('subm'); });
   on(root, 'change', '#m-to', el => { state.subm.to = el.value; show('subm'); });
   on(root, 'change', '#m-status', el => { state.subm.status = el.value; show('subm'); });
+  on(root, 'change', '#m-branch', el => { state.subm.branch = el.value; show('subm'); });
+  on(root, 'change', '#m-level', el => { state.subm.level = el.value; show('subm'); });
+  on(root, 'change', '#m-teacher', el => { state.subm.teacher = el.value; show('subm'); });
   on(root, 'click', '[data-detail]', el => {
     const x = submissions[Number(el.dataset.detail)], p = parse(x.payload), pr = parse(x.progress) || [];
     const label = { present: 'Был', late: 'Был', absent: 'Пропуск' };      // late — старые отметки
@@ -298,8 +342,8 @@
     } catch { LTC.toast('Id учеников из HollyHop не получены — в Excel будет только ClientId', 'bad'); }
     el.disabled = false;
     // ID — строкой, как в выгрузке сотрудников; баллы — числами
-    LTC.xlsx('LTC_submissions.xlsx', ['Дата занятия', 'Группа ID', 'Группа', 'Автор', 'Статус', 'Тема', 'ДЗ', 'Ученик ID', 'Ученик ClientId', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
-    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, String(x.group_id), x.group_name, x.full_name, x.status, p.topic, p.homework || '', ids[s.id] ?? '', String(s.id), s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); }), 'Отметки');
+    LTC.xlsx('LTC_submissions.xlsx', ['Дата занятия', 'Группа ID', 'Группа', 'Филиал', 'Уровень', 'Автор', 'Статус', 'Тема', 'ДЗ', 'Ученик ID', 'Ученик ClientId', 'Статус ученика', 'Присутствовал (мин), 8', 'Homework, 11', 'Домашнее задание, 13', 'Engagement / Активность, 9', 'Discipline / Дисциплина, 10', 'Discipline/Engagement (старое), 17', 'Дисциплина/Активность (старое), 18', 'Доп. тест', 'Доп. тест: баллы', 'Комментарий'],
+    submissions.flatMap(x => { const p = parse(x.payload); return p.students.map(s => [x.lesson_date, String(x.group_id), x.group_name, branchOf(x), levelOf(x), x.full_name, x.status, p.topic, p.homework || '', ids[s.id] ?? '', String(s.id), s.status, s.skills?.[8], s.skills?.[11], s.skills?.[13], s.skills?.[9], s.skills?.[10], s.skills?.[17], s.skills?.[18], personalLabel(p), s.personalSkills ? personalScores(s) : '', s.comment]); }), 'Отметки');
   });
 
   /* ---------- Выгрузка: расписание (HollyHop), фактические отметки по дням, тесты учеников ---------- */
@@ -310,10 +354,13 @@
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 20));
     return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
   };
-  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign', teacher: 'all', attTeacher: 'all' };
+  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign', teacher: 'all', attTeacher: 'all', tf: { branch: '', level: '', teacher: '' } };
   let expCache = {};                                     // переключение листа не перезапрашивает HollyHop
   views.export = async () => {
-    const f = state.exp, schedule = f.kind === 'schedule', range = `from=${f.from}&to=${f.to}`, key = `${f.kind}:${range}`;
+    const f = state.exp, schedule = f.kind === 'schedule';
+    // Тесты учеников: фильтры филиал / уровень / преподаватель считаются на сервере — сводки и Excel по выборке.
+    const filterQs = f.kind === 'tests' ? Object.entries(f.tf).filter(([, v]) => v).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('') : '';
+    const range = `from=${f.from}&to=${f.to}${filterQs}`, key = `${f.kind}:${range}`;
     // Расписание — тяжёлый запрос к HollyHop: только по кнопке «Показать», не при открытии раздела или вкладки.
     const requested = f.go; f.go = false;
     const rep = expCache[key] || (schedule && !requested ? null : (expCache[key] = await api(`/export/${f.kind}?${range}`)));
@@ -324,7 +371,7 @@
     // посещаемость — выбранная на её вкладке (по умолчанию все преподаватели).
     if (rep && tests && f.sheet === 'teachers' && !rep.byTeacher.some(t => t.id === f.teacher)) f.teacher = rep.byTeacher[0]?.id || 'all';
     if (rep && tests && !rep.attendance.scopes.some(x => x.id === f.attTeacher)) f.attTeacher = 'all';
-    const teacherQs = tests ? `${f.sheet === 'teachers' ? `&teacher=${encodeURIComponent(f.teacher)}` : ''}&attendanceTeacher=${encodeURIComponent(f.attTeacher)}` : '';
+    const teacherQs = tests ? `${f.sheet === 'teachers' ? `&resultsTeacher=${encodeURIComponent(f.teacher)}` : ''}&attendanceTeacher=${encodeURIComponent(f.attTeacher)}` : '';
     const pill = (attr, value, label, active) => `<button class="pill ${active ? 'active' : ''}" ${attr}="${value}">${esc(label)}</button>`;
     const day = d => (schedule ? `${Number(d.slice(8))}.${d.slice(5, 7)}` : String(Number(d.slice(8))));
     main.innerHTML = `
@@ -355,7 +402,12 @@
   function testsView(rep, f) {
     const pill = (key, label) => `<button class="pill ${key === f.sheet ? 'active' : ''}" data-exp-sheet="${key}">${esc(label)}</button>`;
     if (!['summary', 'teachers', 'attendance'].includes(f.sheet) && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = 'summary';
-    const pills = `<div class="toolbar">${pill('summary', 'Отчет')}${rep.sheets.map(x => pill(x.key, `${x.name} · ${x.rows.length}`)).join('')}${pill('teachers', `По преподавателям · ${rep.byTeacher.length}`)}${pill('attendance', 'Посещаемость')}</div>`;
+    const o = rep.options, tf = f.tf;
+    const filters = `<div class="toolbar">${filterSelect('t-branch', 'Все филиалы', uniq([...o.branches, tf.branch]), tf.branch, 'data-tf="branch"')}
+      ${filterSelect('t-level', 'Все уровни', [...o.levels, ...(tf.level && !o.levels.includes(tf.level) ? [tf.level] : [])], tf.level, 'data-tf="level"')}
+      ${filterSelect('t-teacher', 'Все преподаватели', o.teachers.map(t => [t.id, t.name]), tf.teacher, 'data-tf="teacher"')}
+      ${Object.values(tf).some(Boolean) ? '<button class="btn ghost sm" data-act="tf-reset">Сбросить</button>' : ''}</div>`;
+    const pills = filters + `<div class="toolbar">${pill('summary', 'Отчет')}${rep.sheets.map(x => pill(x.key, `${x.name} · ${x.rows.length}`)).join('')}${pill('teachers', `По преподавателям · ${rep.byTeacher.length}`)}${pill('attendance', 'Посещаемость')}</div>`;
     if (f.sheet === 'teachers') return pills + teachersView(rep, f);
     if (f.sheet === 'attendance') return pills + attendanceView(rep.attendance, f);
     if (f.sheet === 'summary') {
@@ -416,6 +468,8 @@
     const a = $('#e-from').value, b = $('#e-to').value;
     if (a && b) { Object.assign(state.exp, a <= b ? { from: a, to: b } : { from: b, to: a }, { go: true }); expCache = {}; show('export'); }
   });
+  on(root, 'change', '[data-tf]', el => { state.exp.tf[el.dataset.tf] = el.value; show('export'); });
+  on(root, 'click', '[data-act="tf-reset"]', () => { state.exp.tf = { branch: '', level: '', teacher: '' }; show('export'); });
   on(root, 'click', '[data-exp-kind]', el => { state.exp.kind = el.dataset.expKind; show('export'); });
   on(root, 'click', '[data-exp-sheet]', el => { state.exp.sheet = el.dataset.expSheet; show('export'); });
   on(root, 'change', '.e-teacher', el => { state.exp[el.dataset.field] = el.value; show('export'); });

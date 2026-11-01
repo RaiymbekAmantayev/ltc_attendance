@@ -11,7 +11,7 @@ window.TEXTS = {
     rejected: 'Не принято сервером: {name} — {reason}',
     today: 'Сегодня', week: 'Неделя', month: 'Месяц', show: 'Показать', from: 'С', to: 'По', period: 'Период',
     // занятия
-    lessonsTitle: 'Мои занятия', noLessons: 'В этот день занятий нет', students: 'уч.', substitution: 'Замена',
+    lessonsTitle: 'Мои занятия', noLessons: 'В этот день занятий нет', students: 'уч.', substitution: 'Замена', replacesFor: 'вместо {name}', allBranches: 'Все филиалы', allLevels: 'Все уровни',
     written: 'записано {done} из {total}',
     status: { none: 'Не отмечено', pending: '⏳ Ждёт отправки', partial: '⚠️ Отправлено частично', attention: '⚠️ Нужно внимание', done: '✅ В HollyHop' },
     // группа
@@ -59,7 +59,7 @@ needTest: 'Введите баллы теста: {name}', needTestFull: 'Зап�
     offline: 'No connection — showing saved data', queued: 'Waiting to send: {n}. Will be sent automatically when you are online.',
     rejected: 'Rejected by the server: {name} — {reason}',
     today: 'Today', week: 'Week', month: 'Month', show: 'Show', from: 'From', to: 'To', period: 'Period',
-    lessonsTitle: 'My lessons', noLessons: 'No lessons on this day', students: 'st.', substitution: 'Cover',
+    lessonsTitle: 'My lessons', noLessons: 'No lessons on this day', students: 'st.', substitution: 'Cover', replacesFor: 'for {name}', allBranches: 'All branches', allLevels: 'All levels',
     written: 'written {done} of {total}',
     status: { none: 'Not marked', pending: '⏳ Pending', partial: '⚠️ Partially sent', attention: '⚠️ Needs attention', done: '✅ In HollyHop' },
     topic: 'Lesson topic', ktpPick: 'Topic from the plan · {level}', ktpWeek: 'Wk {n} ·', ktpLesson: 'Lesson {n} ·', ktpSection: 'Section', ktpPage: 'SB page', ktpGrammar: 'Grammar', ktpVocabulary: 'Vocabulary', ktpHomework: 'Homework', ktpTest: 'Test/control',

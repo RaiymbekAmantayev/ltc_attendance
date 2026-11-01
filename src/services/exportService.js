@@ -85,11 +85,13 @@ exports.submissions = async (from, to) => {
   return report('submissions', from, to, days, rows);
 };
 
-/** Тесты учеников за период: доп. тесты по категориям, средние ежедневного теста, средний % учеников по преподавателям и посещаемость. */
-exports.tests = async (from, to) => {
+/** Тесты учеников за период: доп. тесты по категориям, средние ежедневного теста, средний % учеников по преподавателям и посещаемость.
+ * query — фильтры branch, level, teacher (пусто — все). */
+exports.tests = async (from, to, query = {}) => {
   exports.period(from, to, TESTS_MAX_DAYS);
+  const filters = { branch: String(query.branch || ''), level: String(query.level || ''), teacher: String(query.teacher || '') };
   const [rep, byTeacher, attendance] = await Promise.all([
-    testsExport.report(from, to), studentReports.results(from, to), studentReports.attendance(from, to)]);
+    testsExport.report(from, to, filters), studentReports.results(from, to, filters), studentReports.attendance(from, to, filters)]);
   return { ...rep, byTeacher, attendance };
 };
 
@@ -129,9 +131,9 @@ function sheet(rep, { name, rows }) {
   };
 }
 
-/** Книга Excel: лист иностранных и лист местных преподавателей; у тестов — ещё «По преподавателям» (options.teacher) и посещаемость (options.attendanceTeacher). */
+/** Книга Excel: лист иностранных и лист местных преподавателей; у тестов — ещё «По преподавателям» (options.resultsTeacher) и посещаемость (options.attendanceTeacher). */
 exports.toXlsx = (rep, options = {}) => (rep.kind === 'tests'
-  ? xlsx.build([...testsExport.xlsxSheets(rep), studentReports.resultsSheet(rep, options.teacher),
+  ? xlsx.build([...testsExport.xlsxSheets(rep), studentReports.resultsSheet(rep, options.resultsTeacher),
     ...studentReports.attendanceSheets(rep, options.attendanceTeacher)])
   : xlsx.build(rep.sheets.map(s => sheet(rep, s))));
 

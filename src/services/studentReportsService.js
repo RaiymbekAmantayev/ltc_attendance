@@ -5,7 +5,7 @@ const Submission = require('../models/submissionModel');
 const personalTests = require('../config/personalTests');
 const testing = require('../config/testing');
 const xlsx = require('../lib/xlsx');
-const { BANDS, bandOf, lookupGroups, ruDate, PCT_STYLE } = require('./testsExportService');
+const { BANDS, bandOf, lookupGroups, matcher, ruDate, PCT_STYLE } = require('./testsExportService');
 
 const PAGE = 1000;
 const ALL = 'all';
@@ -22,13 +22,13 @@ const round = (v, digits = 4) => Math.round(v * 10 ** digits) / 10 ** digits;
 const isoOf = d => (typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10));
 const byStudent = (a, b) => a.student.localeCompare(b.student, 'ru');
 
-/** Отметки за период страницами по id; names — ФИО учеников старых отметок из HollyHop. */
-async function eachSubmission(from, to, onRow) {
-  const found = { names: new Map(), levels: new Map() };
+/** Отметки за период страницами по id, подходящие под фильтры (филиал, уровень, преподаватель); names — ФИО учеников старых отметок из HollyHop. */
+async function eachSubmission(from, to, filters, onRow) {
+  const found = { names: new Map(), levels: new Map() }, match = matcher(filters);
   for (let afterId = 0, page; (page = await Submission.pageForTests(from, to, afterId, PAGE)).length; afterId = page[page.length - 1].id) {
     const rows = page.map(r => ({ ...r, payload: Submission.parse(r.payload) }));
     await lookupGroups(rows, found);
-    for (const r of rows) {
+    for (const r of rows.filter(x => match(x, found))) {
       const nameOf = s => s.name || found.names.get(r.group_id)?.get(String(s.id)) || `ID ${s.id}`;
       onRow(r, nameOf);
     }
@@ -55,9 +55,9 @@ function resultsOf(s, p) {
 }
 
 /** Результаты по преподавателям: [{ id, name, rows: [{ student, results, pct, band }] }]. */
-exports.results = async (from, to) => {
+exports.results = async (from, to, filters = {}) => {
   const teachers = new Map();
-  await eachSubmission(from, to, (r, nameOf) => {
+  await eachSubmission(from, to, filters, (r, nameOf) => {
     const key = String(r.teacher_id);
     if (!teachers.has(key)) teachers.set(key, { id: key, name: r.full_name, students: new Map() });
     const students = teachers.get(key).students;
@@ -89,7 +89,7 @@ function scope(id, name, students) {
 }
 
 /** Посещаемость: { criteria, scopes: [все, ...преподаватели] }; rows — ученики хотя бы с одним пропуском. */
-exports.attendance = async (from, to) => {
+exports.attendance = async (from, to, filters = {}) => {
   const all = new Map(), seen = new Set(), teachers = new Map();
   const add = (map, r, s, name) => {
     const key = `${r.group_id}:${s.id}`;
@@ -98,7 +98,7 @@ exports.attendance = async (from, to) => {
     row.lessons++;
     if (s.status === 'absent') row.absent++;
   };
-  await eachSubmission(from, to, (r, nameOf) => {
+  await eachSubmission(from, to, filters, (r, nameOf) => {
     const t = String(r.teacher_id);
     if (!teachers.has(t)) teachers.set(t, { id: t, name: r.full_name, students: new Map() });
     const date = isoOf(r.lesson_date);

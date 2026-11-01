@@ -73,7 +73,7 @@ exports.list = ({ date, status, from, to, teacherId } = {}) => {
 
 /** Отметки за период для выгрузки тестов — страницами по id (без LIMIT 5000 у list): только нужные поля. */
 exports.pageForTests = (from, to, afterId, limit) => query(
-  `SELECT x.id, x.group_id, x.group_name, x.lesson_date, x.teacher_id, x.payload, t.full_name
+  `SELECT x.id, x.group_id, x.group_name, x.branch, x.lesson_date, x.teacher_id, x.payload, t.full_name
    FROM submissions x JOIN teachers t ON t.id = x.teacher_id
    WHERE x.lesson_date BETWEEN ? AND ? AND x.id > ? ORDER BY x.id LIMIT ?`, [from, to, afterId, limit]);
 
