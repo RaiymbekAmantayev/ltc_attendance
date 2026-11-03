@@ -107,9 +107,25 @@ test('второй преподаватель того же урока отме�
   await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9001', lesson_date: h.WED, substitute_id: t3 } });
   const third = await api.request('POST', '/api/lessons', { tg: TG.third, body: body(h.uuid(), '9001', list) });
   assert.equal(third.status, 409);
-  assert.equal(third.json.error, 'lesson_full');
+  assert.equal(third.json.error, 'lesson_lang_taken');
   const [rows] = await h.db.query('SELECT teacher_id, slot FROM submissions WHERE group_id="9001" ORDER BY slot');
   assert.deepEqual(rows.map(r => [r.teacher_id, r.slot]), [[t1, 1], [t2, 2]]);
+});
+
+test('замена местного: местный слот занят заменяющим — иностранный всё равно отмечает', async () => {
+  await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9001', lesson_date: h.WED, substitute_id: t3 } });
+  await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9001', lesson_date: h.WED, substitute_id: t2 } });
+  const list = (await students('9001')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
+  assert.equal((await api.request('POST', '/api/lessons', { tg: TG.third, body: body(h.uuid(), '9001', list) })).json.status, 'done');
+
+  const local = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) });
+  assert.equal(local.json.error, 'lesson_lang_taken', 'второй местный — нельзя');
+
+  const foreign = list.map(s => ({ ...s, skills: { 11: 5, 9: 5, 10: 5 } }));
+  const second = await api.request('POST', '/api/lessons', { tg: TG.other, body: body(h.uuid(), '9001', foreign) });
+  assert.equal(second.json.status, 'done', JSON.stringify(second.json));
+  const [rows] = await h.db.query('SELECT teacher_id, slot FROM submissions WHERE group_id="9001" ORDER BY slot');
+  assert.deepEqual(rows.map(r => [r.teacher_id, r.slot]), [[t3, 1], [t2, 2]]);
 });
 
 test('занятия идут по порядку — с утра до вечера', async () => {

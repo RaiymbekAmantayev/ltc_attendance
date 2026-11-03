@@ -11,7 +11,10 @@ const Ktp = require('../models/ktpModel');
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ATTEMPTS = 8;                                  // после стольких неудач подряд — «нужно внимание»
-const MAX_PER_LESSON = 2;                                // на урок не больше двух отметок, и только от разных преподавателей
+// На урок — одна отметка от местного (ru) и одна от иностранного (en) преподавателя. Слот закреплён за языком,
+// поэтому uq_lesson_slot не пускает вторую отметку того же языка даже при одновременной отправке.
+const SLOT_BY_LANG = { ru: 1, en: 2 };
+const langOf = teacher => (teacher.lang === 'en' ? 'en' : 'ru');
 
 /** Тип теста по языку преподавателя: Foreign (en) → 131, Local (ru) → 132. */
 exports.testTypeFor = teacher => (teacher.lang === 'en' ? testing.testTypeIds.foreign : testing.testTypeIds.local);
@@ -97,30 +100,34 @@ exports.save = async (teacher, { key, groupId, date, topic, homework, ktpTopicId
   };
   if (personal && !payload.students.some(s => s.personalSkills)) throw new AppError(422, 'personal_empty');
 
-  // Своя отметка урока — одна, правка задним числом запрещена; второй комплект может прислать только другой преподаватель.
+  // Своя отметка урока — одна, правка задним числом запрещена; второй комплект может прислать только преподаватель другого типа.
   const existing = await Submission.listByGroupAndDate(groupId, date);
   const mine = existing.find(r => r.teacher_id === teacher.id);
   if (mine) {
     if (mine.idem_key !== key) throw new AppError(409, 'already_saved');
     return exports.push(key);                                              // повтор того же нажатия
   }
-  if (existing.length >= MAX_PER_LESSON) throw new AppError(409, 'lesson_full');
+  const lang = langOf(teacher);
+  if (existing.some(r => r.teacher_lang === lang)) throw new AppError(409, 'lesson_lang_taken');
+  // Старые отметки занимали слоты по порядку: если «свой» слот уже занят отметкой другого типа — берём свободный.
+  const slot = [SLOT_BY_LANG[lang], 3 - SLOT_BY_LANG[lang]].find(n => !existing.some(r => r.slot === n));
+  if (!slot) throw new AppError(409, 'lesson_full');
 
   try {
     await Submission.create({
-      key, teacherId: teacher.id, groupId, groupName: group.name, branch: group.branch, date, slot: existing.length + 1, payload,
+      key, teacherId: teacher.id, groupId, groupName: group.name, branch: group.branch, date, slot, payload,
     });
     await Audit.log(teacher.id, 'save', groupId, date, {
       students: payload.students.length, substitution: !!group.substitution,
     }, `teacher:${teacher.id}`);
   } catch (error) {
     if (error.code !== 'ER_DUP_ENTRY') throw error;
-    // Гонка: одновременно ушли это же нажатие, другое нажатие этого преподавателя или чужая отметка на тот же слот.
+    // Гонка: одновременно ушли это же нажатие, другое нажатие этого преподавателя или отметка другого преподавателя того же типа.
     const saved = await Submission.findByKey(key);
     if (!saved || saved.teacher_id !== teacher.id) {
       const now = await Submission.listByGroupAndDate(groupId, date);
-      const full = !now.some(r => r.teacher_id === teacher.id) && now.length >= MAX_PER_LESSON;
-      throw new AppError(409, full ? 'lesson_full' : 'already_saved');
+      if (now.some(r => r.teacher_id === teacher.id)) throw new AppError(409, 'already_saved');
+      throw new AppError(409, now.some(r => r.teacher_lang === lang) ? 'lesson_lang_taken' : 'lesson_full');
     }
   }
   return exports.push(key);

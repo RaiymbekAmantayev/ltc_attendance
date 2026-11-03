@@ -11,9 +11,10 @@ exports.create = ({ key, teacherId, groupId, groupName, branch, date, slot, payl
 exports.findByKey = async key =>
   (await query('SELECT * FROM submissions WHERE idem_key = ?', [key]))[0] || null;
 
-/** Все отметки урока (не больше двух — от разных преподавателей). */
-exports.listByGroupAndDate = (groupId, date) =>
-  query('SELECT * FROM submissions WHERE group_id = ? AND lesson_date = ? ORDER BY slot', [groupId, date]);
+/** Все отметки урока (не больше двух: от местного и от иностранного преподавателя) с языком автора. */
+exports.listByGroupAndDate = (groupId, date) => query(
+  `SELECT x.*, t.lang AS teacher_lang FROM submissions x JOIN teachers t ON t.id = x.teacher_id
+   WHERE x.group_id = ? AND x.lesson_date = ? ORDER BY x.slot`, [groupId, date]);
 
 /** Отметка урока, сделанная этим преподавателем. */
 exports.findByGroupAndDate = async (groupId, date, teacherId) =>

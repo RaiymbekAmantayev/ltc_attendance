@@ -251,12 +251,12 @@
       </select><div id="ktp-info" class="ktp-info"></div>`;
   }
 
-  /** Подсказка по выбранной теме: страница SB, грамматика, лексика, ДЗ, контроль. */
+  /** Подсказка по выбранной теме: страница SB, грамматика, лексика, контроль. ДЗ с КТП не связано — вводится вручную. */
   function paintKtpInfo() {
     const box = $('#ktp-info'); if (!box) return;
     const t = T(), x = ktpTopic($('#ktp').value);
     const rows = x ? [[t.ktpSection, x.section], [t.ktpPage, x.sb_page], [t.ktpGrammar, x.grammar], [t.ktpVocabulary, x.vocabulary],
-      [t.ktpHomework, x.homework], [t.ktpTest, x.test_control]].filter(([, v]) => v) : [];
+      [t.ktpTest, x.test_control]].filter(([, v]) => v) : [];
     box.hidden = !rows.length;
     box.innerHTML = rows.map(([k, v]) => `<div class="mrow"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('');
   }
@@ -306,9 +306,9 @@
         <fieldset class="${readOnly ? 'lock' : ''}" ${readOnly ? 'disabled' : ''}>
           ${ktpBlock(saved)}
           <input type="text" id="topic" class="field" placeholder="${esc(t.topic)}" maxlength="500" value="${esc(saved?.topic || '')}">
+          <input type="text" id="homework" class="field" placeholder="${esc(t.homework)}" maxlength="${state.me.rules.homeworkMaxLen || 500}" value="${esc(saved?.homework || '')}">
           ${personalBlock(saved)}
           ${students.map(s => studentCard(s, byId(s.id), readOnly)).join('')}
-          <textarea id="homework" class="field" rows="2" placeholder="${esc(t.homework)}" maxlength="${state.me.rules.homeworkMaxLen || 500}">${esc(saved?.homework || '')}</textarea>
         </fieldset>
         ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(t.save)}</button></div>`}`;
       $$('.scard').forEach(card => paintPersonal(card, byId(card.dataset.student).personalSkills));
@@ -460,7 +460,6 @@
   on(root, 'change', '#ktp', el => {
     const x = ktpTopic(el.value);
     if (x) $('#topic').value = x.title.slice(0, 500);
-    if (x?.homework && !$('#homework').value.trim()) $('#homework').value = x.homework;   // ДЗ из КТП — подсказка, можно исправить
     paintKtpInfo();
   });
   on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
