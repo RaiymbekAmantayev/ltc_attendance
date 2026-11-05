@@ -18,15 +18,33 @@ const bandOf = pct => (pct >= 0.8 ? 'good' : pct >= 0.7 ? 'mid' : 'bad');
 const levelOf = raw => levels.normalize(raw) || String(raw || '').trim() || '—';
 const levelRank = level => (levels.LEVELS.includes(level) ? levels.LEVELS.indexOf(level) : levels.LEVELS.length);
 
-/** Дополняет found ФИО учеников и уровнем групп, которых нет в старых отметках: names — groupId → Map(id → name), levels — groupId → level. */
-async function lookupGroups(rows, { names, levels: groupLevels }) {
-  const need = [...new Set(rows.filter(r => !r.payload.level || r.payload.students.some(s => !s.name)).map(r => r.group_id))]
-    .filter(id => !names.has(id));
+/**
+ * Справочник отчёта: ФИО учеников и уровни групп из составов за период (один массовый запрос, см. rostersInRange).
+ * names — groupId → Map(id → name), levels — groupId → level, rosters — сами составы (для посещаемости). Сбой HollyHop — пустой справочник.
+ */
+async function newFound(from, to) {
+  const found = { names: new Map(), levels: new Map(), rosters: null };
+  try { found.rosters = await hollihop.rostersInRange(from, to); }
+  catch (error) { console.warn('отчёт: составы групп за период не получены —', error.message); return found; }
+  for (const [id, g] of found.rosters) {
+    found.names.set(id, new Map(g.students.map(s => [s.id, s.name])));
+    found.levels.set(id, g.level);
+  }
+  return found;
+}
+
+/** Дополняет found ФИО и уровнем по группам, которых нет в справочнике (старые отметки без ФИО/уровня): по запросу на группу. */
+async function lookupGroups(rows, found) {
+  const { names, levels: groupLevels } = found, fetched = found.fetched || (found.fetched = new Set());   // группы, уже догруженные поштучно
+  const missing = r => (!r.payload.level && !groupLevels.has(r.group_id))
+    || r.payload.students.some(s => !s.name && !names.get(r.group_id)?.has(String(s.id)));
+  const need = [...new Set(rows.filter(missing).map(r => r.group_id))].filter(id => !fetched.has(id));
   for (let i = 0; i < need.length; i += HH_CONCURRENCY) {
     await Promise.all(need.slice(i, i + HH_CONCURRENCY).map(async id => {
+      fetched.add(id);
       const [students, group] = await Promise.all([hollihop.allStudents(id).catch(() => []), hollihop.groupById(id).catch(() => null)]);
-      names.set(id, new Map(students.map(s => [s.id, s.name])));
-      groupLevels.set(id, group?.level || '');
+      names.set(id, new Map([...(names.get(id) || []), ...students.map(s => [s.id, s.name])]));
+      groupLevels.set(id, group?.level || groupLevels.get(id) || '');
     }));
   }
 }
@@ -43,8 +61,8 @@ const withCity = (page, cityOf) => page.map(r => ({ ...r, payload: Submission.pa
 
 /** Отчёт за период: { kind, from, to, summary, sheets, filters, options }. filters — { city, level, teacher }; период проверяет вызывающий. */
 exports.report = async (from, to, filters = {}) => {
-  const found = { names: new Map(), levels: new Map() };
-  const match = matcher(filters), cityOf = await hollihop.cityResolver();
+  const [found, cityOf] = await Promise.all([newFound(from, to), hollihop.cityResolver()]);
+  const match = matcher(filters);
   const options = { cities: new Set(), levels: new Set(), teachers: new Map() };   // что есть за период — для фильтров
   const personal = new Map();                            // categoryId → лист
   const daily = new Map();                               // ученик + группа + преподаватель → строка средних
@@ -147,6 +165,7 @@ exports.report = async (from, to, filters = {}) => {
 exports.BANDS = BANDS;
 exports.bandOf = bandOf;
 exports.lookupGroups = lookupGroups;
+exports.newFound = newFound;
 exports.matcher = matcher;
 exports.withCity = withCity;
 exports.ruDate = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;

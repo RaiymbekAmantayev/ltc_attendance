@@ -1,5 +1,6 @@
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -13,6 +14,7 @@ if (trustProxy) app.set('trust proxy', 1);              // за cloudflared / ng
 
 app.use(requestLog);
 app.use(securityHeaders);
+app.use(compression());                                  // gzip: список отметок и выгрузки — мегабайты JSON
 app.use(express.json({ limit: '300kb' }));
 
 app.get('/healthz', async (req, res) => {

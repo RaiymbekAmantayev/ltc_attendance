@@ -8,7 +8,7 @@ const personalTests = require('../config/personalTests');
 const testing = require('../config/testing');
 const xlsx = require('../lib/xlsx');
 const hollihop = require('./hollihopService');
-const { BANDS, bandOf, lookupGroups, matcher, withCity, ruDate, PCT_STYLE } = require('./testsExportService');
+const { BANDS, bandOf, lookupGroups, newFound, matcher, withCity, ruDate, PCT_STYLE } = require('./testsExportService');
 
 const PAGE = 1000;
 const ALL = 'all';
@@ -28,11 +28,11 @@ const byStudent = (a, b) => a.student.localeCompare(b.student, 'ru');
 
 /** Отметки за период страницами по id, подходящие под фильтры (город, уровень, преподаватель); names — ФИО учеников старых отметок из HollyHop. */
 async function eachSubmission(from, to, filters, onRow, onPage) {
-  const found = { names: new Map(), levels: new Map() }, match = matcher(filters), cityOf = await hollihop.cityResolver();
+  const [found, cityOf] = await Promise.all([newFound(from, to), hollihop.cityResolver()]), match = matcher(filters);
   for (let afterId = 0, page; (page = await Submission.pageForTests(from, to, afterId, PAGE)).length; afterId = page[page.length - 1].id) {
     const rows = withCity(page, cityOf);
     await lookupGroups(rows, found);
-    if (onPage) await onPage(rows);
+    if (onPage) await onPage(rows, found);
     for (const r of rows.filter(x => match(x, found))) {
       const nameOf = s => s.name || found.names.get(r.group_id)?.get(String(s.id)) || `ID ${s.id}`;
       onRow(r, nameOf);
@@ -94,10 +94,14 @@ function scope(id, name, students) {
 }
 
 /**
- * Текущий состав групп страницы: groupId → Set(id учеников) из HollyHop (кэш на весь отчёт).
- * Не удалось получить состав — null: ученики группы не отбрасываются, чтобы сбой HollyHop не обнулил отчёт.
+ * Текущий состав групп страницы: groupId → Set(id учеников). Сначала — из составов за период (found.rosters, один массовый запрос),
+ * группы, которых там нет, — по запросу на группу. Не удалось получить состав — null: ученики группы не отбрасываются.
  */
-async function loadActive(rows, active) {
+async function loadActive(rows, active, found) {
+  for (const id of new Set(rows.map(r => r.group_id))) {
+    const g = !active.has(id) && found.rosters?.get(id);
+    if (g) active.set(id, new Set(g.students.filter(s => s.current).map(s => s.id)));
+  }
   const need = [...new Set(rows.map(r => r.group_id))].filter(id => !active.has(id));
   for (let i = 0; i < need.length; i += HH_CONCURRENCY) {
     await Promise.all(need.slice(i, i + HH_CONCURRENCY).map(async id => {
@@ -130,7 +134,7 @@ exports.attendance = async (from, to, filters = {}) => {
       const lesson = `${r.group_id}:${date}:${s.id}`;
       if (!seen.has(lesson)) { seen.add(lesson); add(all, r, s, name); }
     }
-  }, rows => loadActive(rows, active));
+  }, (rows, found) => loadActive(rows, active, found));
   return {
     criteria: CRITERIA.map(([key, label]) => [key, label]),
     scopes: [scope(ALL, 'Все преподаватели', all), ...teacherList(teachers).map(t => scope(t.id, t.name, t.students))],

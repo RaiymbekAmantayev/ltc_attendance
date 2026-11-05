@@ -50,6 +50,18 @@ async function respond(method, payload) {
       return ok({ EdUnits: units, Now: new Date().toISOString() });
     }
     case 'GetEdUnitStudents': {
+      if (!payload.edUnitId) {                                   // все группы сразу (rostersInRange): страницы take/skip
+        const ids = [...new Set([...EDUNITS.map(u => String(u.Id)), ...Object.keys(state.rosters)])];
+        const all = [];
+        for (const id of ids) {
+          const unit = EDUNITS.find(u => String(u.Id) === id);
+          const { body } = await respond('GetEdUnitStudents', { edUnitId: id });
+          all.push(...body.EdUnitStudents.map(s => ({ EdUnitId: Number(id), EdUnitLevel: unit?.Level || '', EdUnitOfficeOrCompanyId: unit?.OfficeOrCompanyId,
+            EdUnitOfficeOrCompanyName: unit?.OfficeOrCompanyName, ...s })));
+        }
+        const skip = payload.skip || 0;
+        return ok({ EdUnitStudents: all.slice(skip, skip + (payload.take || 1000)) });
+      }
       if (state.rosters[payload.edUnitId]) return ok({ EdUnitStudents: state.rosters[payload.edUnitId] });
       const unit = EDUNITS.find(u => String(u.Id) === String(payload.edUnitId));
       const count = unit ? unit.StudentsCount : 0;

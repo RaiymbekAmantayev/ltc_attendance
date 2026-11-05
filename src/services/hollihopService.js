@@ -145,13 +145,15 @@ function toGroup(edUnit, date, teacherId) {
 const GROUP_TYPES = 'Group,MiniGroup,Individual';
 
 // Короткий кэш: один заход преподавателя порождает несколько запросов с одинаковым ответом.
+// Храним промис: одновременные одинаковые запросы ждут один ответ HollyHop, а не идут каждый сам; ошибка не кэшируется.
 const CACHE_TTL_MS = Number(process.env.HH_CACHE_TTL_MS ?? 30000);
 const cache = new Map();
-async function cached(key, load) {
+function cached(key, load, ttl = CACHE_TTL_MS) {
   const hit = cache.get(key);
   if (hit && hit.until > Date.now()) return hit.value;
-  const value = await load();
-  cache.set(key, { value, until: Date.now() + CACHE_TTL_MS });
+  const value = Promise.resolve().then(load);
+  cache.set(key, { value, until: Date.now() + ttl });
+  value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
   if (cache.size > 500) for (const [k, v] of cache) if (v.until < Date.now()) cache.delete(k);
   return value;
 }
@@ -256,6 +258,34 @@ exports.students = async groupId => {
 
 /** Все ученики группы, включая выбывших, — чтобы в отчётах по старым отметкам не терялись ФИО. */
 exports.allStudents = async groupId => (await allStudents(groupId)).map(pickName);
+
+/**
+ * Составы всех групп, у которых связка ученика пересекается с периодом, — пачками по 1000 вместо запроса на каждую группу
+ * (за месяц ≈ 300 групп: по одной — десятки секунд из-за лимита HollyHop). Для отчётов; кэш 10 минут.
+ * Map groupId → { level, students: [{ id, name, beginDate, endDate, current }] }; current — учится сейчас (см. isCurrent).
+ */
+const ROSTER_PAGE = 1000, ROSTER_TTL_MS = Number(process.env.HH_ROSTER_TTL_MS ?? 10 * 60 * 1000);
+exports.rostersInRange = (from, to) => cached(`rr:${from}:${to}`, async () => {
+  // dateTo — на год вперёд: связки, которые начнутся позже (BeginDate в будущем, без EndDate), по правилу isCurrent тоже актуальны.
+  const until = addDays(to > todayIso() ? to : todayIso(), 366);
+  const page = skip => call('GetEdUnitStudents', { statuses: 'Normal,WorkingOff', dateFrom: from, dateTo: until, take: ROSTER_PAGE, skip })
+    .then(r => r.EdUnitStudents || []);
+  const rows = await page(0);
+  for (let skip = ROSTER_PAGE, last = rows.length; last === ROSTER_PAGE; skip += ROSTER_PAGE * 4) {   // дальше — по 4 страницы разом
+    const pages = await Promise.all([0, 1, 2, 3].map(i => page(skip + i * ROSTER_PAGE)));
+    for (const p of pages) rows.push(...p);
+    last = pages[pages.length - 1].length;
+  }
+  const today = todayIso(), out = new Map();
+  for (const s of rows) {
+    const id = String(s.EdUnitId);
+    rememberOffice(s.EdUnitOfficeOrCompanyName, s.EdUnitOfficeOrCompanyId);
+    if (!out.has(id)) out.set(id, { level: s.EdUnitLevel || '', students: [] });
+    const st = { id: String(s.StudentClientId), name: s.StudentName, beginDate: s.BeginDate, endDate: s.EndDate };
+    out.get(id).students.push({ ...st, current: isCurrent(st, today) });
+  }
+  return out;
+}, ROSTER_TTL_MS);
 
 /**
  * Id ученика в HollyHop по ClientId (GetEdUnitStudents отдаёт только StudentClientId) — для показа в админке.
