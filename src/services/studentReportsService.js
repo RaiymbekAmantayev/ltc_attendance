@@ -1,14 +1,18 @@
 // Вкладки «Тестов учеников» по ученикам из наших отметок (submissions.payload), не из HollyHop:
 // «По преподавателям» — средний % тестов каждого ученика преподавателя в колонке своего диапазона (≥80%, 70–79%, <70%);
 // «Посещаемость» — сколько учеников с 1 и 2 пропусками и с долей пропусков от 15%, 30%, 50% — по преподавателю или по всем.
+// В посещаемости — только ученики, которые сейчас учатся в группе (GetEdUnitStudents: BeginDate есть, EndDate нет или не прошла),
+// и по ученику одна строка: уроки всех его текущих групп вместе.
 const Submission = require('../models/submissionModel');
 const personalTests = require('../config/personalTests');
 const testing = require('../config/testing');
 const xlsx = require('../lib/xlsx');
-const { BANDS, bandOf, lookupGroups, matcher, ruDate, PCT_STYLE } = require('./testsExportService');
+const hollihop = require('./hollihopService');
+const { BANDS, bandOf, lookupGroups, matcher, withCity, ruDate, PCT_STYLE } = require('./testsExportService');
 
 const PAGE = 1000;
 const ALL = 'all';
+const HH_CONCURRENCY = 4;
 /** Критерии посещаемости: test(пропусков, уроков). Проценты — «не меньше», поэтому ученик может попасть в несколько строк. */
 const CRITERIA = [
   ['one', '1 пропуск', (absent) => absent === 1],
@@ -22,12 +26,13 @@ const round = (v, digits = 4) => Math.round(v * 10 ** digits) / 10 ** digits;
 const isoOf = d => (typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10));
 const byStudent = (a, b) => a.student.localeCompare(b.student, 'ru');
 
-/** Отметки за период страницами по id, подходящие под фильтры (филиал, уровень, преподаватель); names — ФИО учеников старых отметок из HollyHop. */
-async function eachSubmission(from, to, filters, onRow) {
-  const found = { names: new Map(), levels: new Map() }, match = matcher(filters);
+/** Отметки за период страницами по id, подходящие под фильтры (город, уровень, преподаватель); names — ФИО учеников старых отметок из HollyHop. */
+async function eachSubmission(from, to, filters, onRow, onPage) {
+  const found = { names: new Map(), levels: new Map() }, match = matcher(filters), cityOf = await hollihop.cityResolver();
   for (let afterId = 0, page; (page = await Submission.pageForTests(from, to, afterId, PAGE)).length; afterId = page[page.length - 1].id) {
-    const rows = page.map(r => ({ ...r, payload: Submission.parse(r.payload) }));
+    const rows = withCity(page, cityOf);
     await lookupGroups(rows, found);
+    if (onPage) await onPage(rows);
     for (const r of rows.filter(x => match(x, found))) {
       const nameOf = s => s.name || found.names.get(r.group_id)?.get(String(s.id)) || `ID ${s.id}`;
       onRow(r, nameOf);
@@ -83,33 +88,49 @@ exports.results = async (from, to, filters = {}) => {
 
 /** Строки учеников и счётчики критериев по набору уроков ученика. */
 function scope(id, name, students) {
-  const rows = [...students.values()].map(r => ({ ...r, rate: round(r.absent / r.lessons) })).sort(byStudent);
+  const rows = [...students.values()].map(({ groups, ...r }) => ({ ...r, group: [...groups.values()].join(', '), rate: round(r.absent / r.lessons) })).sort(byStudent);
   const counts = Object.fromEntries(CRITERIA.map(([key, , test]) => [key, rows.filter(r => test(r.absent, r.lessons)).length]));
   return { id, name, students: rows.length, counts, rows: rows.filter(r => r.absent) };
 }
 
-/** Посещаемость: { criteria, scopes: [все, ...преподаватели] }; rows — ученики хотя бы с одним пропуском. */
+/**
+ * Текущий состав групп страницы: groupId → Set(id учеников) из HollyHop (кэш на весь отчёт).
+ * Не удалось получить состав — null: ученики группы не отбрасываются, чтобы сбой HollyHop не обнулил отчёт.
+ */
+async function loadActive(rows, active) {
+  const need = [...new Set(rows.map(r => r.group_id))].filter(id => !active.has(id));
+  for (let i = 0; i < need.length; i += HH_CONCURRENCY) {
+    await Promise.all(need.slice(i, i + HH_CONCURRENCY).map(async id => {
+      try { active.set(id, new Set((await hollihop.students(id)).map(s => String(s.id)))); }
+      catch (error) { console.warn(`посещаемость: состав группы ${id} не получен — ${error.message}`); active.set(id, null); }
+    }));
+  }
+}
+
+/** Посещаемость: { criteria, scopes: [все, ...преподаватели] }; rows — ученики хотя бы с одним пропуском, groups — их текущие группы. */
 exports.attendance = async (from, to, filters = {}) => {
-  const all = new Map(), seen = new Set(), teachers = new Map();
+  const all = new Map(), seen = new Set(), teachers = new Map(), active = new Map();
   const add = (map, r, s, name) => {
-    const key = `${r.group_id}:${s.id}`;
-    if (!map.has(key)) map.set(key, { student: name, group: r.group_name || r.group_id, lessons: 0, absent: 0 });
+    const key = String(s.id);
+    if (!map.has(key)) map.set(key, { student: name, groups: new Map(), lessons: 0, absent: 0 });
     const row = map.get(key);
+    row.groups.set(r.group_id, r.group_name || r.group_id);   // группа — по id: после переименования в HollyHop — последнее название
     row.lessons++;
     if (s.status === 'absent') row.absent++;
   };
+  const isActive = (r, s) => { const ids = active.get(r.group_id); return ids == null || ids.has(String(s.id)); };
   await eachSubmission(from, to, filters, (r, nameOf) => {
     const t = String(r.teacher_id);
     if (!teachers.has(t)) teachers.set(t, { id: t, name: r.full_name, students: new Map() });
     const date = isoOf(r.lesson_date);
-    for (const s of r.payload.students) {
+    for (const s of r.payload.students.filter(x => isActive(r, x))) {
       const name = nameOf(s);
       add(teachers.get(t).students, r, s, name);
       // Урок могут отметить два преподавателя: в «все преподаватели» ученик урока считается один раз (по первой отметке).
       const lesson = `${r.group_id}:${date}:${s.id}`;
       if (!seen.has(lesson)) { seen.add(lesson); add(all, r, s, name); }
     }
-  });
+  }, rows => loadActive(rows, active));
   return {
     criteria: CRITERIA.map(([key, label]) => [key, label]),
     scopes: [scope(ALL, 'Все преподаватели', all), ...teacherList(teachers).map(t => scope(t.id, t.name, t.students))],
@@ -160,7 +181,7 @@ exports.attendanceSheets = (rep, teacherId) => {
   };
   const list = {
     name: 'Пропуски учеников', freeze: { rows: 1, cols: 2 }, widths: [5, 34, 24, 10, 11, 12],
-    rows: [['№', 'ФИО ученика', 'Группа', 'Уроков', 'Пропусков', '% пропусков'].map(head),
+    rows: [['№', 'ФИО ученика', 'Группы', 'Уроков', 'Пропусков', '% пропусков'].map(head),
       ...sc.rows.map((r, i) => [num(i + 1), { v: r.student, s: S.cell }, { v: r.group, s: S.cell }, num(r.lessons), num(r.absent),
         { v: r.rate, s: r.rate >= 0.3 ? S.pctBad : r.rate >= 0.15 ? S.pctMid : S.pct }])],
   };

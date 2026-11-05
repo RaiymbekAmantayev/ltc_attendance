@@ -17,12 +17,18 @@ const { period } = require('../lib/date');
 const ACTOR = 'admin';
 
 // ── Обзор ──
-exports.overview = async (req, res) => res.json(await stats.overview(period(req.query.from, req.query.to)));
+const cityOf = req => String(req.query.city || '');                 // фильтр Обзора по городу; пусто — все
+exports.overview = async (req, res) => res.json(await stats.overview({ ...period(req.query.from, req.query.to), city: cityOf(req) }));
+/** Занятия без отметки за период — отдельным запросом: расписание из HollyHop грузится несколько секунд. */
+exports.unmarked = async (req, res) => {
+  try { res.json(await stats.unmarked({ ...period(req.query.from, req.query.to), city: cityOf(req) })); }
+  catch (error) { res.json({ error: error.code || 'hollihop_unavailable' }); }
+};
 exports.today = async (req, res) => {
-  try { res.json(await stats.todayBoard()); }
+  try { res.json(await stats.todayBoard(undefined, cityOf(req))); }
   catch (error) { res.json({ error: error.code || 'hollihop_unavailable', expected: 0, marked: 0, pending: [] }); }
 };
-exports.teacherStats = async (req, res) => res.json(await stats.teachers(period(req.query.from, req.query.to)));
+exports.teacherStats = async (req, res) => res.json(await stats.teachers({ ...period(req.query.from, req.query.to), city: cityOf(req) }));
 
 exports.config = (req, res) => res.json({
   rules: config.rules, testing, personalTests: personalTests.categories, timezone: config.timezone, auditRetentionDays: config.auditRetentionDays,
@@ -59,7 +65,7 @@ exports.importTeachers = async (req, res) => {
 exports.listGroups = async (req, res) => {
   const date = lessons.isDate(req.query.date) ? req.query.date : lessons.todayIso();
   const groups = await substitutionService.withMainTeacher(await hollihop.groupsOnDate(date));
-  res.json(groups.map(({ id, name, branch, time, level, teacher }) => ({ id, name, branch, time, level, teacher })));
+  res.json(groups.map(({ id, name, branch, city, time, level, teacher }) => ({ id, name, branch, city, time, level, teacher })));
 };
 exports.listSubstitutions = async (req, res) => res.json(await substitutionService.recent());
 
@@ -101,12 +107,16 @@ exports.exportReport = async (req, res) => {
 };
 
 // ── Отметки и аудит ──
-exports.listSubmissions = async (req, res) => res.json(await Submission.list({
-  date: lessons.isDate(req.query.date) ? req.query.date : null,
-  from: lessons.isDate(req.query.from) ? req.query.from : null,
-  to: lessons.isDate(req.query.to) ? req.query.to : null,
-  status: ['pending', 'partial', 'attention', 'done'].includes(req.query.status) ? req.query.status : null,
-}));
+/** Отметки за период; city — город филиала отметки (для фильтра). */
+exports.listSubmissions = async (req, res) => {
+  const [rows, cityOf] = await Promise.all([Submission.list({
+    date: lessons.isDate(req.query.date) ? req.query.date : null,
+    from: lessons.isDate(req.query.from) ? req.query.from : null,
+    to: lessons.isDate(req.query.to) ? req.query.to : null,
+    status: ['pending', 'partial', 'attention', 'done'].includes(req.query.status) ? req.query.status : null,
+  }), hollihop.cityResolver()]);
+  res.json(rows.map(r => ({ ...r, city: cityOf(r.branch) })));
+};
 
 /** Id учеников в HollyHop по ClientId (?clientIds=1,2,3) — для карточки отметки. */
 exports.studentIds = async (req, res) => {

@@ -1,9 +1,9 @@
 // Демо-режим HollyHop (HH_MOCK=1): отвечает в формате API 2.0 тестовыми данными, записи копит в памяти.
 // Нужен, чтобы разрабатывать и показывать кабинет без ключей и песочницы, и для автотестов.
 const TEACHERS = [
-  { Id: 101, LastName: 'Иванова', FirstName: 'Анна', Fired: false, Offices: [{ Name: 'Абая' }] },
-  { Id: 102, LastName: 'Смит', FirstName: 'John', Fired: false, Offices: [{ Name: 'Хайвилл' }] },
-  { Id: 103, LastName: 'Сатпаева', FirstName: 'Алия', Fired: false, Offices: [{ Name: 'Абая' }] },
+  { Id: 101, LastName: 'Иванова', FirstName: 'Анна', Fired: false, Offices: [{ Id: 7, Name: 'Абая' }] },
+  { Id: 102, LastName: 'Смит', FirstName: 'John', Fired: false, Offices: [{ Id: 3, Name: 'Хайвилл' }] },
+  { Id: 103, LastName: 'Сатпаева', FirstName: 'Алия', Fired: false, Offices: [{ Id: 7, Name: 'Абая' }] },
   { Id: 104, LastName: 'Петров', FirstName: 'Игорь', Fired: true, Offices: [] },
 ];
 const WEEKDAYS = { work: 31, odd: 21, even: 42 };            // Пн–Пт, Пн/Ср/Пт, Вт/Чт/Сб
@@ -13,28 +13,28 @@ const item = (weekdays, from, to, teacher) => ({
 const nameOf = id => { const t = TEACHERS.find(x => x.Id === id); return `${t.LastName} ${t.FirstName}`; };
 
 const EDUNITS = [
-  { Id: 9001, Name: 'English Elementary A1', OfficeOrCompanyName: 'Абая', StudentsCount: 6, Vacancies: 4, Level: 'Elementary', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.odd, '10:00', '11:30', 101)] },
-  { Id: 9002, Name: 'English Pre-Intermediate B1', OfficeOrCompanyName: 'Хайвилл', StudentsCount: 8, Vacancies: 2, Level: 'Pre-Intermediate', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.odd, '12:00', '13:30', 102)] },
-  { Id: 9003, Name: 'IELTS Intensive', OfficeOrCompanyName: 'Абая', StudentsCount: 2, Vacancies: 8, Level: 'Upper-Intermediate', Discipline: 'IELTS', ScheduleItems: [item(WEEKDAYS.work, '15:00', '16:30', 101)] },
-  { Id: 9004, Name: 'Русский для иностранцев', OfficeOrCompanyName: 'Хайвилл', StudentsCount: 11, Vacancies: -1, Level: 'Beginner', Discipline: 'Russian', ScheduleItems: [item(WEEKDAYS.even, '18:00', '19:30', 103)] },
-  { Id: 9005, Name: 'Kids Starter', OfficeOrCompanyName: 'Абая', StudentsCount: 7, Vacancies: 3, Level: 'Starter', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.work, '09:00', '10:00', 103)] },
+  { Id: 9001, Name: 'English Elementary A1', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 6, Vacancies: 4, Level: 'Elementary', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.odd, '10:00', '11:30', 101)] },
+  { Id: 9002, Name: 'English Pre-Intermediate B1', OfficeOrCompanyId: 3, OfficeOrCompanyName: 'Хайвилл', StudentsCount: 8, Vacancies: 2, Level: 'Pre-Intermediate', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.odd, '12:00', '13:30', 102)] },
+  { Id: 9003, Name: 'IELTS Intensive', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 2, Vacancies: 8, Level: 'Upper-Intermediate', Discipline: 'IELTS', ScheduleItems: [item(WEEKDAYS.work, '15:00', '16:30', 101)] },
+  { Id: 9004, Name: 'Русский для иностранцев', OfficeOrCompanyId: 3, OfficeOrCompanyName: 'Хайвилл', StudentsCount: 11, Vacancies: -1, Level: 'Beginner', Discipline: 'Russian', ScheduleItems: [item(WEEKDAYS.even, '18:00', '19:30', 103)] },
+  { Id: 9005, Name: 'Kids Starter', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 7, Vacancies: 3, Level: 'Starter', Discipline: 'English', ScheduleItems: [item(WEEKDAYS.work, '09:00', '10:00', 103)] },
 ];
 const STUDENT_NAMES = ['Аян Сериков', 'Мира Ахметова', 'Тимур Бекенов', 'Дина Оспанова', 'Alex Brown', 'Лейла Нурпеисова',
   'Руслан Ким', 'Сабина Жумабаева', 'Данияр Тулеубеков', 'Emma Davis', 'Амина Касымова'];
 
 // Учебная единица 31 — тестовая (как в песочнице HollyHop): занятия каждый день.
-EDUNITS.push({ Id: 31, Name: 'TEST · Sandbox group', OfficeOrCompanyName: 'Абая', StudentsCount: 3, Vacancies: 5, Level: 'Test', Discipline: 'English', ScheduleItems: [item(127, '09:00', '10:00', 101)] });
+EDUNITS.push({ Id: 31, Name: 'TEST · Sandbox group', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 3, Vacancies: 5, Level: 'Test', Discipline: 'English', ScheduleItems: [item(127, '09:00', '10:00', 101)] });
 const SKILLS_BY_TYPE = { 131: { 8: 45, 9: 5, 10: 5, 11: 5 }, 132: { 8: 45, 9: 5, 10: 5, 13: 5 } };   // набор навыков и максимумы каждого типа теста
 const TEST_TYPES = [131, 132];
 // Персональные типы 1 (Progress Test) и 4 (Final Test «Общий»): без любого из навыков HollyHop отвечает 500 «The skill "…" is not specified».
 const FULL_SKILLS = { 1: 'listening', 2: 'reading', 3: 'grammar', 4: 'vocabulary', 5: 'pronunciation', 6: 'speaking', 7: 'writing' };
 const PERSONAL_SKILLS_BY_TYPE = { 1: { ...FULL_SKILLS, 21: 'attendance' }, 4: FULL_SKILLS };
 
-const state = { writes: [], tests: [], personal: [], failures: [], coins: {}, extraFields: {}, coinWrites: [] };   // coins: ClientId → «Коины»; extraFields: ClientId → прочие поля
+const state = { writes: [], tests: [], personal: [], failures: [], coins: {}, extraFields: {}, coinWrites: [], rosters: {} };   // coins: ClientId → «Коины»; extraFields: ClientId → прочие поля; rosters: edUnitId → строки GetEdUnitStudents (для тестов)
 
 /** Для тестов: следующий вызов метода завершится ошибкой {status, body}; when(payload) — только подходящий вызов. */
 const failNext = (method, failure) => state.failures.push({ method, ...failure });
-const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; state.coins = {}; state.extraFields = {}; state.coinWrites = []; };
+const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; state.coins = {}; state.extraFields = {}; state.coinWrites = []; state.rosters = {}; };
 
 const ok = body => ({ status: 200, body });
 
@@ -50,6 +50,7 @@ async function respond(method, payload) {
       return ok({ EdUnits: units, Now: new Date().toISOString() });
     }
     case 'GetEdUnitStudents': {
+      if (state.rosters[payload.edUnitId]) return ok({ EdUnitStudents: state.rosters[payload.edUnitId] });
       const unit = EDUNITS.find(u => String(u.Id) === String(payload.edUnitId));
       const count = unit ? unit.StudentsCount : 0;
       const rows = Array.from({ length: count }, (_, i) => ({
@@ -60,6 +61,8 @@ async function respond(method, payload) {
         { StudentClientId: unit.Id * 100 + 99, StudentName: 'Без Даты Начала' });
       return ok({ EdUnitStudents: rows });
     }
+    case 'GetOffices':                                           // Абая (7) — Алматы, Хайвилл (3) — Астана
+      return ok({ Offices: [{ Id: 7, Name: 'Абая' }, { Id: 3, Name: 'Хайвилл' }] });
     case 'GetTeachers':
       return ok({ Teachers: TEACHERS });
     case 'GetStudents':                                          // Id ученика ≠ ClientId: в демо Id = ClientId + 500000

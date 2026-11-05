@@ -7,6 +7,7 @@ const mock = require('./hollihopMock');
 const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
 const coins = require('../config/coins');
+const cities = require('../config/cities');
 
 const MAX_RETRIES = Number(process.env.HH_MAX_RETRIES ?? 4);
 const RETRY_BASE_MS = Number(process.env.HH_RETRY_BASE_MS ?? 700);
@@ -112,8 +113,14 @@ const daysLabel = items => {
 };
 const hasTeacher = (item, teacherId) => !teacherId || !item.TeacherIds || item.TeacherIds.map(String).includes(String(teacherId));
 
+// Название офиса → Id: запоминаем из ответов HollyHop, чтобы у старых отметок (в БД только название филиала) знать город.
+const officeIds = new Map();
+const rememberOffice = (name, id) => { if (name && id != null) officeIds.set(String(name).trim(), String(id)); };
+
 /** Приводит учебную единицу HollyHop к виду, который нужен кабинету. */
 function toGroup(edUnit, date, teacherId) {
+  rememberOffice(edUnit.OfficeOrCompanyName, edUnit.OfficeOrCompanyId);
+  const officeId = edUnit.OfficeOrCompanyId ?? officeIds.get(String(edUnit.OfficeOrCompanyName || '').trim());
   const all = edUnit.ScheduleItems || [];
   const items = all.filter(item => (!date || item.Weekdays & weekdayBit(date)) && hasTeacher(item, teacherId));
   const first = items[0] || all[0] || {};
@@ -122,6 +129,7 @@ function toGroup(edUnit, date, teacherId) {
     id: String(edUnit.Id),
     name: edUnit.Name,
     branch: edUnit.OfficeOrCompanyName || '',
+    city: (edUnit.OfficeOrCompanyName || officeId != null) ? cities.of(officeId) : '',
     time: first.BeginTime ? `${first.BeginTime}–${first.EndTime}` : '',
     days: daysLabel(items.length ? items : all),
     students,
@@ -176,7 +184,7 @@ exports.scheduleOnDate = date => cached(`sd:${date}`, async () => {
  * Занятия по расписанию за период: [{date, groupId, group, teacherIds, minutes}] — для выгрузки «Расписание».
  * Если HollyHop отдал дни занятий (queryDays), берём их; иначе разворачиваем строки расписания по дням недели.
  */
-exports.lessonsInRange = (from, to) => cached(`lr:${from}:${to}`, async () => {
+exports.lessonsInRange = (from, to) => cached(`lr:${from}:${to}`, async () => {   // у каждой строки city — город офиса группы
   const { EdUnits = [] } = await call('GetEdUnits',
     { types: GROUP_TYPES, dateFrom: from, dateTo: to, statuses: 'Working,Stopped,Finished', queryDays: true });
   return lessonsFromEdUnits(EdUnits, from, to);
@@ -192,10 +200,13 @@ const itemMinutes = item => {
 function lessonsFromEdUnits(edUnits, from, to) {
   const out = [];
   for (const u of edUnits) {
+    rememberOffice(u.OfficeOrCompanyName, u.OfficeOrCompanyId);
+    const officeId = u.OfficeOrCompanyId ?? officeIds.get(String(u.OfficeOrCompanyName || '').trim());
+    const city = (u.OfficeOrCompanyName || officeId != null) ? cities.of(officeId) : '';
     const items = u.ScheduleItems || [];
     const byId = new Map(items.map(i => [String(i.Id), i]));
     const push = (date, item, minutes) => out.push({
-      date, groupId: String(u.Id), group: u.Name, minutes: minutes || 0,
+      date, groupId: String(u.Id), group: u.Name, city, minutes: minutes || 0,
       teacherIds: (item.TeacherIds || []).map(String), teacherNames: item.Teachers || [],
     });
     if (Array.isArray(u.Days) && u.Days.length) {
@@ -266,11 +277,31 @@ exports.studentIds = async clientIds => {
 
 exports.teachers = async () => {
   const { Teachers = [] } = await call('GetTeachers', { take: 10000 });
+  for (const t of Teachers) for (const o of t.Offices || []) rememberOffice(o.Name, o.Id);
   return Teachers.filter(t => !t.Fired).map(t => ({
     id: String(t.Id),
     name: `${t.LastName || ''} ${t.FirstName || ''}`.trim(),
     branch: t.Offices?.[0]?.Name || null,
   }));
+};
+
+/**
+ * Город по названию филиала (у отметок в БД хранится только название): офисы из GetOffices + запомненные из других ответов.
+ * Возвращает функцию name → «Алматы» / «Астана»; без названия — «—». Список офисов кэшируется на 10 минут.
+ */
+let officesLoaded = { until: 0 };
+exports.cityResolver = async () => {
+  if (officesLoaded.until < Date.now()) {
+    try {
+      const { Offices = [] } = await call('GetOffices', {});
+      for (const o of Offices) rememberOffice(o.Name, o.Id);
+      officesLoaded = { until: Date.now() + 10 * 60 * 1000 };
+    } catch (error) {
+      console.warn('HH GetOffices:', error.message);       // без списка офисов — по запомненным названиям
+      officesLoaded = { until: Date.now() + 60 * 1000 };
+    }
+  }
+  return name => (String(name || '').trim() ? cities.of(officeIds.get(String(name).trim())) : cities.NONE);
 };
 
 /* ---------------- Запись ---------------- */

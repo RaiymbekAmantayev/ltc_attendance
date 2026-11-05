@@ -13,6 +13,7 @@ router.use('/admin', express.static(path.join(__dirname, '../../admin')));
 
 router.get(API + '/config', c.config);
 router.get(API + '/overview', c.overview);
+router.get(API + '/overview/unmarked', c.unmarked);
 router.get(API + '/today', c.today);
 router.get(API + '/teacher-stats', c.teacherStats);
 

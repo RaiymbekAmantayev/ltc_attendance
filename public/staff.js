@@ -16,7 +16,7 @@
   state.groupsDate = LTC.localToday();
   state.filter = 'all';
   state.query = '';
-  state.branch = '';
+  state.city = '';
   state.level = '';
 
   const periodBar = () => {
@@ -121,7 +121,7 @@
     const q = state.query.trim().toLowerCase();
     return groupsCache.filter(g =>
       (!q || [g.name, g.branch, g.teacher, g.substitute].join(' ').toLowerCase().includes(q)) &&
-      (!state.branch || g.branch === state.branch) && (!state.level || g.level === state.level) &&
+      (!state.city || g.city === state.city) && (!state.level || g.level === state.level) &&
       (state.filter === 'all' || (state.filter === 'unmarked' && g.status === 'none') || (state.filter === 'low' && g.lowFill)));
   };
   const paintGroups = () => {
@@ -129,15 +129,15 @@
     $('#glist').innerHTML = list.length ? list.map(groupCard).join('') : `<div class="empty">${esc(T().noLessons)}</div>`;
   };
 
-  /** Фильтры филиала и уровня — из групп дня; выбранного нет в этот день — сбрасывается. */
+  /** Фильтры города и уровня — из групп дня; выбранного нет в этот день — сбрасывается. */
   const paintGroupFilters = () => {
     const t = T(), uniq = list => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
-    const branches = uniq(groupsCache.map(g => g.branch)), levels = uniq(groupsCache.map(g => g.level));
-    if (!branches.includes(state.branch)) state.branch = '';
+    const cities = uniq(groupsCache.map(g => g.city)), levels = uniq(groupsCache.map(g => g.level));
+    if (!cities.includes(state.city)) state.city = '';
     if (!levels.includes(state.level)) state.level = '';
     const select = (id, all, list, value) => `<select id="${id}" class="grow"><option value="">${esc(all)}</option>${list.map(v =>
       `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
-    $('#gfilters').innerHTML = select('gbranch', t.allBranches, branches, state.branch) + select('glevel', t.allLevels, levels, state.level);
+    $('#gfilters').innerHTML = select('gcity', t.allCities, cities, state.city) + select('glevel', t.allLevels, levels, state.level);
   };
 
   A.views.groups = async view => {
@@ -166,7 +166,7 @@
   on(root, 'click', '[data-act="gtoday"]', () => { state.groupsDate = LTC.localToday(); rerender(); });
   on(root, 'change', '#gdate', el => { if (el.value) { state.groupsDate = el.value; rerender(); } });
   on(root, 'input', '#gq', el => { state.query = el.value; paintGroups(); });
-  on(root, 'change', '#gbranch', el => { state.branch = el.value; paintGroups(); });
+  on(root, 'change', '#gcity', el => { state.city = el.value; paintGroups(); });
   on(root, 'change', '#glevel', el => { state.level = el.value; paintGroups(); });
   on(root, 'click', '[data-filter]', el => {
     state.filter = el.dataset.filter;

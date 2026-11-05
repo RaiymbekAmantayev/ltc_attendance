@@ -14,7 +14,7 @@
     ktp_topic_add: 'КТП: тема добавлена', ktp_topic_update: 'КТП: тема изменена', ktp_topic_remove: 'КТП: тема удалена', ktp_import: 'КТП: вставка из Excel',
   };
   const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
-  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '', branch: '', level: '', teacher: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
+  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '', city: '', level: '', teacher: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
@@ -78,19 +78,21 @@
 
   /* ---------- Обзор ---------- */
   let teacherStats = [];
+  state.city = '';
+  const CITIES = ['Алматы', 'Астана'];
+  const cityQs = () => (state.city ? `&city=${encodeURIComponent(state.city)}` : '');
   views.overview = async () => {
-    const [ov, today, ts] = await Promise.all([api('/overview?' + qs()), api('/today'), api('/teacher-stats?' + qs())]);
+    const [ov, today, ts] = await Promise.all([api('/overview?' + qs() + cityQs()), api('/today?' + cityQs().slice(1)), api('/teacher-stats?' + qs() + cityQs())]);
     teacherStats = ts;
-    const k = ov.kpi, s = ov.statuses, pend = today.pending || [];
+    const k = ov.kpi, s = ov.statuses, pend = today.pending || [], a = ov.attendance, pt = k.personalTests;
     main.innerHTML = `
       ${periodBar()}
+      <div class="toolbar">${filterSelect('o-city', 'Все города', CITIES, state.city)}</div>
       <div class="kpi-grid wide">
-        <div class="kpi"><div class="kpi-label">Занятий отмечено</div><div class="kpi-value">${k.lessons}</div><div class="kpi-sub">${k.teachersWorking} из ${k.activeTeachers} преподавателей</div></div>
-        <div class="kpi"><div class="kpi-label">Учеников отмечено</div><div class="kpi-value">${k.students}</div></div>
-        <div class="kpi ${LTC.sev(k.attendanceRate)}"><div class="kpi-label">Посещаемость</div><div class="kpi-value">${LTC.pct(k.attendanceRate)}</div></div>
-        <div class="kpi ${LTC.sev(k.onTimeRate, 70, 90)}"><div class="kpi-label">Отмечено в день урока</div><div class="kpi-value">${LTC.pct(k.onTimeRate)}</div><div class="kpi-sub">цель пилота — задать</div></div>
-        <div class="kpi ${LTC.sev(k.syncedRate, 80, 95)}"><div class="kpi-label">Записано в HollyHop</div><div class="kpi-value">${LTC.pct(k.syncedRate)}</div></div>
-        <div class="kpi ${LTC.sev(k.testPassRate, 60, 80)}"><div class="kpi-label">Порог теста</div><div class="kpi-value">${LTC.pct(k.testPassRate)}</div><div class="kpi-sub">средний тест ${LTC.pct(k.avgTest)}</div></div>
+        <div class="kpi"><div class="kpi-label">Занятий отмечено</div><div class="kpi-value">${k.lessonsMarked}</div><div class="kpi-sub">${k.lessons} отметок · ${k.teachersWorking} из ${k.activeTeachers} преподавателей</div></div>
+        <div class="kpi" id="kpi-unmarked"><div class="kpi-label">Занятий не отмечено</div><div class="kpi-value">…</div><div class="kpi-sub">загрузка расписания HollyHop</div></div>
+        <div class="kpi ${LTC.sev(k.attendanceRate)}"><div class="kpi-label">Посещаемость</div><div class="kpi-value">${LTC.pct(k.attendanceRate)}</div><div class="kpi-sub">был ${a.present} · пропуск ${a.absent}</div></div>
+        <div class="kpi ${LTC.sev(pt.rate, 60, 80)}"><div class="kpi-label">Тесты ≥80%</div><div class="kpi-value">${LTC.pct(pt.rate)}</div><div class="kpi-sub">${pt.good} из ${pt.count} доп. тестов</div></div>
       </div>
       <div class="grid2">
         <div class="card"><div class="card-title">Сегодня ${today.error ? '<span class="chip warn">расписание HollyHop недоступно</span>' : `<span class="chip ${pend.length ? 'warn' : 'good'}">${today.marked} / ${today.expected}</span>`}</div>
@@ -116,6 +118,22 @@
             <td>${x.done}</td><td class="${x.problems ? 'sev-crit' : ''}">${x.problems}</td><td>${esc(x.last || '—')}</td></tr>`).join('')}</table></div>
       </div>`;
   };
+  // «Занятий не отмечено» — после отрисовки: расписание за период из HollyHop грузится несколько секунд.
+  const paintUnmarked = async key => {
+    const r = await api('/overview/unmarked?' + key).catch(e => ({ error: e.message }));
+    const box = $('#kpi-unmarked');
+    if (!box || box.dataset.key !== key) return;                      // ушли с вкладки или сменили фильтр
+    box.className = 'kpi' + (r.error ? '' : r.unmarked ? ' sev-warn' : ' sev-ok');
+    box.querySelector('.kpi-value').textContent = r.error ? '—' : r.unmarked;
+    box.querySelector('.kpi-sub').textContent = r.error ? 'расписание HollyHop недоступно' : `из ${r.expected} по расписанию`;
+  };
+  const drawOverview = views.overview;
+  views.overview = async () => {
+    await drawOverview();
+    const key = qs() + cityQs(), box = $('#kpi-unmarked');
+    if (box) { box.dataset.key = key; paintUnmarked(key); }
+  };
+  on(root, 'change', '#o-city', el => { state.city = el.value; show('overview'); });
   on(root, 'click', '[data-act="csv-tstats"]', () => LTC.csv(`LTC_teachers_${state.period.from}_${state.period.to}.csv`,
     ['Преподаватель', 'Филиал', 'Занятий', 'Учеников', 'Посещаемость %', 'В день урока %', 'В HollyHop', 'Проблем', 'Последнее занятие'],
     teacherStats.map(x => [x.name, x.branch, x.lessons, x.students, x.attendance, x.onTime, x.done, x.problems, x.last])));
@@ -191,7 +209,7 @@
   /* ---------- Замены ---------- */
   // Кто занят во время выбранного занятия: { teacherId: [{group, time}] } — такого назначить нельзя.
   let subTeachers = [], busy = {}, subGroups = [];
-  state.subsF = { branch: '', level: '' };
+  state.subsF = { city: '', level: '' };
   const busyText = list => 'занят ' + list.map(x => `${x.time} · ${x.group}`).join('; ');
   views.subs = async () => {
     const [all, subs] = await Promise.all([api('/teachers'), api('/substitutions')]);
@@ -218,17 +236,17 @@
     try { subGroups = await api('/groups?date=' + $('#s-date').value); }
     catch (e) { subGroups = []; select.innerHTML = `<option value="">${esc(e.message)}</option>`; return loadBusy(); }
     const f = state.subsF;
-    if (f.branch && !subGroups.some(g => g.branch === f.branch)) f.branch = '';
+    if (f.city && !subGroups.some(g => g.city === f.city)) f.city = '';
     if (f.level && !subGroups.some(g => g.level === f.level)) f.level = '';
-    $('#s-filters').innerHTML = filterSelect('s-branch', 'Все филиалы', uniq(subGroups.map(g => g.branch)), f.branch)
+    $('#s-filters').innerHTML = filterSelect('s-city', 'Все города', uniq(subGroups.map(g => g.city)), f.city)
       + filterSelect('s-level', 'Все уровни', uniq(subGroups.map(g => g.level)), f.level);
     paintSubGroups();
   }
-  /** Группы дня по фильтрам филиала и уровня; в подписи — основной преподаватель (кого заменяют). */
+  /** Группы дня по фильтрам города и уровня; в подписи — основной преподаватель (кого заменяют). */
   function paintSubGroups() {
     const select = $('#s-group'); if (!select) return;
     const f = state.subsF, chosen = select.value;
-    const list = subGroups.filter(g => (!f.branch || g.branch === f.branch) && (!f.level || g.level === f.level));
+    const list = subGroups.filter(g => (!f.city || g.city === f.city) && (!f.level || g.level === f.level));
     select.innerHTML = list.length
       ? list.map(g => `<option value="${esc(g.id)}">${esc([g.name, g.branch, g.level, g.time].filter(Boolean).join(' · '))}${g.teacher ? ` — ${esc(g.teacher)}` : ''}</option>`).join('')
       : `<option value="">${subGroups.length ? 'нет групп по фильтру' : 'в этот день занятий нет'}</option>`;
@@ -266,7 +284,7 @@
     $('[data-act="add-sub"]').disabled = !!list;
   }
   on(root, 'change', '#s-date', loadGroups);
-  on(root, 'change', '#s-branch', el => { state.subsF.branch = el.value; paintSubGroups(); });
+  on(root, 'change', '#s-city', el => { state.subsF.city = el.value; paintSubGroups(); });
   on(root, 'change', '#s-level', el => { state.subsF.level = el.value; paintSubGroups(); });
   on(root, 'change', '#s-group', loadBusy);
   on(root, 'change', '#s-teacher', paintBusy);
@@ -279,20 +297,20 @@
 
   /* ---------- Отметки ---------- */
   let submissions = [];
-  const levelOf = x => parse(x.payload).level || '—', branchOf = x => x.branch || '—';   // старые отметки — без уровня
+  const levelOf = x => parse(x.payload).level || '—', branchOf = x => x.branch || '—', cityOf = x => x.city || '—';   // старые отметки — без уровня
   views.subm = async () => {
     const f = state.subm;
     if (!f.from) { f.from = LTC.addDays(LTC.localToday(), -6); f.to = LTC.localToday(); }
     const params = new URLSearchParams({ from: f.from, to: f.to, status: f.status });
     const all = await api('/submissions?' + params);
-    // Филиал, уровень и преподаватель — фильтры по загруженному периоду (и для таблицы, и для Excel).
+    // Город, уровень и преподаватель — фильтры по загруженному периоду (и для таблицы, и для Excel).
     const teachers = [...new Map(all.map(x => [String(x.teacher_id), x.full_name])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'ru'));
-    submissions = all.filter(x => (!f.branch || branchOf(x) === f.branch) && (!f.level || levelOf(x) === f.level) && (!f.teacher || String(x.teacher_id) === f.teacher));
+    submissions = all.filter(x => (!f.city || cityOf(x) === f.city) && (!f.level || levelOf(x) === f.level) && (!f.teacher || String(x.teacher_id) === f.teacher));
     main.innerHTML = `
       <div class="toolbar">
         <input type="date" id="m-from" value="${f.from}"><span class="mut">—</span><input type="date" id="m-to" value="${f.to}">
         <select id="m-status"><option value="">Все статусы</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${esc(v[1])}</option>`).join('')}</select>
-        ${filterSelect('m-branch', 'Все филиалы', uniq([...all.map(branchOf), f.branch]), f.branch)}
+        ${filterSelect('m-city', 'Все города', uniq([...all.map(cityOf), f.city]), f.city)}
         ${filterSelect('m-level', 'Все уровни', uniq([...all.map(levelOf), f.level]), f.level)}
         ${filterSelect('m-teacher', 'Все преподаватели', teachers, f.teacher)}
         <span class="mut">${submissions.length} записей</span>
@@ -310,7 +328,7 @@
   on(root, 'change', '#m-from', el => { state.subm.from = el.value; show('subm'); });
   on(root, 'change', '#m-to', el => { state.subm.to = el.value; show('subm'); });
   on(root, 'change', '#m-status', el => { state.subm.status = el.value; show('subm'); });
-  on(root, 'change', '#m-branch', el => { state.subm.branch = el.value; show('subm'); });
+  on(root, 'change', '#m-city', el => { state.subm.city = el.value; show('subm'); });
   on(root, 'change', '#m-level', el => { state.subm.level = el.value; show('subm'); });
   on(root, 'change', '#m-teacher', el => { state.subm.teacher = el.value; show('subm'); });
   on(root, 'click', '[data-detail]', el => {
@@ -354,11 +372,11 @@
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 20));
     return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
   };
-  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign', teacher: 'all', attTeacher: 'all', tf: { branch: '', level: '', teacher: '' } };
+  state.exp = { ...payPeriod(), kind: 'schedule', sheet: 'foreign', teacher: 'all', attTeacher: 'all', tf: { city: '', level: '', teacher: '' } };
   let expCache = {};                                     // переключение листа не перезапрашивает HollyHop
   views.export = async () => {
     const f = state.exp, schedule = f.kind === 'schedule';
-    // Тесты учеников: фильтры филиал / уровень / преподаватель считаются на сервере — сводки и Excel по выборке.
+    // Тесты учеников: фильтры город / уровень / преподаватель считаются на сервере — сводки и Excel по выборке.
     const filterQs = f.kind === 'tests' ? Object.entries(f.tf).filter(([, v]) => v).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('') : '';
     const range = `from=${f.from}&to=${f.to}${filterQs}`, key = `${f.kind}:${range}`;
     // Расписание — тяжёлый запрос к HollyHop: только по кнопке «Показать», не при открытии раздела или вкладки.
@@ -384,7 +402,7 @@
       <p class="hint">${schedule
         ? 'Уроки по расписанию HollyHop: сколько занятий по группам у преподавателя в каждый день. Ак. час — 45 минут. Ставку и ЗП заполните в Excel — ЗП посчитается формулой.'
         : tests && f.sheet === 'teachers' ? 'Средний % тестов каждого ученика преподавателя (ежедневный тест за каждый урок и доп. тесты) — в колонке своего диапазона. Только отметки из кабинета. Период — до года.'
-        : tests && f.sheet === 'attendance' ? 'Сколько учеников с 1 и 2 пропусками и с долей пропусков от 15%, 30%, 50% (ученик может попасть в несколько строк). По отметкам из кабинета, ученик — в своей группе. Период — до года.'
+        : tests && f.sheet === 'attendance' ? 'Сколько учеников с 1 и 2 пропусками и с долей пропусков от 15%, 30%, 50% (ученик может попасть в несколько строк). По отметкам из кабинета, только ученики, которые сейчас учатся в группе; уроки всех его групп — вместе. Период — до года.'
         : tests ? 'Результаты доп. тестов по каждому ученику (по листу на категорию) и средние баллы ежедневного теста. Только тесты, внесённые через кабинет. Период — до года.'
         : 'Уроки, которые преподаватели отметили в кабинете и отправили в HollyHop, по дням. Автор — тот, кто заполнил (в том числе на замене).'}</p>
       ${tests ? testsView(rep, f) : rep ? `<div class="toolbar">${rep.sheets.map(x => pill('data-exp-sheet', x.key, `${x.name} · ${x.rows.length}`, x.key === f.sheet)).join('')}</div>
@@ -403,7 +421,7 @@
     const pill = (key, label) => `<button class="pill ${key === f.sheet ? 'active' : ''}" data-exp-sheet="${key}">${esc(label)}</button>`;
     if (!['summary', 'teachers', 'attendance'].includes(f.sheet) && !rep.sheets.some(x => x.key === f.sheet)) f.sheet = 'summary';
     const o = rep.options, tf = f.tf;
-    const filters = `<div class="toolbar">${filterSelect('t-branch', 'Все филиалы', uniq([...o.branches, tf.branch]), tf.branch, 'data-tf="branch"')}
+    const filters = `<div class="toolbar">${filterSelect('t-city', 'Все города', uniq([...o.cities, tf.city]), tf.city, 'data-tf="city"')}
       ${filterSelect('t-level', 'Все уровни', [...o.levels, ...(tf.level && !o.levels.includes(tf.level) ? [tf.level] : [])], tf.level, 'data-tf="level"')}
       ${filterSelect('t-teacher', 'Все преподаватели', o.teachers.map(t => [t.id, t.name]), tf.teacher, 'data-tf="teacher"')}
       ${Object.values(tf).some(Boolean) ? '<button class="btn ghost sm" data-act="tf-reset">Сбросить</button>' : ''}</div>`;
@@ -459,7 +477,7 @@
       ${att.criteria.map(([key, label]) => `<tr><td class="left">${esc(label)}</td><td><b>${sc.counts[key]}</b></td></tr>`).join('')}
     </table></div></div>
     <div class="card"><div class="card-title">Ученики с пропусками · ${sc.rows.length}</div><div class="tscroll"><table class="exp">
-      <tr><th>№</th><th class="left">ФИО ученика</th><th class="left">Группа</th><th>Уроков</th><th>Пропусков</th><th>%</th></tr>
+      <tr><th>№</th><th class="left">ФИО ученика</th><th class="left">Группы</th><th>Уроков</th><th>Пропусков</th><th>%</th></tr>
       ${sc.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.student)}</td><td class="left">${esc(r.group)}</td><td>${r.lessons}</td><td>${r.absent}</td>
         <td class="${r.rate >= 0.3 ? 'sev-crit' : r.rate >= 0.15 ? 'sev-warn' : ''}">${pct(r.rate)}</td></tr>`).join('')}
     </table></div>${sc.rows.length ? '' : '<div class="empty">Пропусков за период нет</div>'}</div>`;
@@ -469,7 +487,7 @@
     if (a && b) { Object.assign(state.exp, a <= b ? { from: a, to: b } : { from: b, to: a }, { go: true }); expCache = {}; show('export'); }
   });
   on(root, 'change', '[data-tf]', el => { state.exp.tf[el.dataset.tf] = el.value; show('export'); });
-  on(root, 'click', '[data-act="tf-reset"]', () => { state.exp.tf = { branch: '', level: '', teacher: '' }; show('export'); });
+  on(root, 'click', '[data-act="tf-reset"]', () => { state.exp.tf = { city: '', level: '', teacher: '' }; show('export'); });
   on(root, 'click', '[data-exp-kind]', el => { state.exp.kind = el.dataset.expKind; show('export'); });
   on(root, 'click', '[data-exp-sheet]', el => { state.exp.sheet = el.dataset.expSheet; show('export'); });
   on(root, 'change', '.e-teacher', el => { state.exp[el.dataset.field] = el.value; show('export'); });

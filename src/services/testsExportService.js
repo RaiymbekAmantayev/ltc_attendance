@@ -34,22 +34,25 @@ async function lookupGroups(rows, { names, levels: groupLevels }) {
 const NONE = '—';
 /** Уровень группы отметки: из payload, у старых — из HollyHop (found.levels). */
 const levelOfRow = (r, found) => levelOf(r.payload.level || found.levels.get(r.group_id));
-/** Фильтр отметок по филиалу, уровню группы и преподавателю (пусто — все); без филиала — «—». */
-const matcher = ({ branch, level, teacher } = {}) => (r, found) =>
-  (!branch || (r.branch || NONE) === branch) && (!teacher || String(r.teacher_id) === String(teacher)) && (!level || levelOfRow(r, found) === level);
+/** Фильтр отметок по городу (r.city — см. withCity), уровню группы и преподавателю (пусто — все); без филиала — «—». */
+const matcher = ({ city, level, teacher } = {}) => (r, found) =>
+  (!city || (r.city || NONE) === city) && (!teacher || String(r.teacher_id) === String(teacher)) && (!level || levelOfRow(r, found) === level);
 
-/** Отчёт за период: { kind, from, to, summary, sheets, filters, options }. filters — { branch, level, teacher }; период проверяет вызывающий. */
+/** Страница отметок из БД: payload разобран, city — город филиала отметки. */
+const withCity = (page, cityOf) => page.map(r => ({ ...r, payload: Submission.parse(r.payload), city: cityOf(r.branch) }));
+
+/** Отчёт за период: { kind, from, to, summary, sheets, filters, options }. filters — { city, level, teacher }; период проверяет вызывающий. */
 exports.report = async (from, to, filters = {}) => {
   const found = { names: new Map(), levels: new Map() };
-  const match = matcher(filters);
-  const options = { branches: new Set(), levels: new Set(), teachers: new Map() };   // что есть за период — для фильтров
+  const match = matcher(filters), cityOf = await hollihop.cityResolver();
+  const options = { cities: new Set(), levels: new Set(), teachers: new Map() };   // что есть за период — для фильтров
   const personal = new Map();                            // categoryId → лист
   const daily = new Map();                               // ученик + группа + преподаватель → строка средних
   for (let afterId = 0, page; (page = await Submission.pageForTests(from, to, afterId, PAGE)).length; afterId = page[page.length - 1].id) {
-    const rows = page.map(r => ({ ...r, payload: Submission.parse(r.payload) }));
+    const rows = withCity(page, cityOf);
     await lookupGroups(rows, found);
     for (const r of rows) {
-      options.branches.add(r.branch || NONE); options.levels.add(levelOfRow(r, found)); options.teachers.set(String(r.teacher_id), r.full_name);
+      options.cities.add(r.city); options.levels.add(levelOfRow(r, found)); options.teachers.set(String(r.teacher_id), r.full_name);
       if (match(r, found) && r.payload.students.some(s => s.skills || s.personalSkills)) collect(r);
     }
   }
@@ -132,9 +135,9 @@ exports.report = async (from, to, filters = {}) => {
   const sortRu = list => list.sort((a, b) => a.localeCompare(b, 'ru'));
   return {
     kind: 'tests', title: 'Тесты учеников', from, to, summary, sheets,
-    filters: { branch: filters.branch || '', level: filters.level || '', teacher: filters.teacher ? String(filters.teacher) : '' },
+    filters: { city: filters.city || '', level: filters.level || '', teacher: filters.teacher ? String(filters.teacher) : '' },
     options: {
-      branches: sortRu([...options.branches]),
+      cities: sortRu([...options.cities]),
       levels: [...options.levels].sort((a, b) => levelRank(a) - levelRank(b) || a.localeCompare(b)),
       teachers: [...options.teachers].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
     },
@@ -145,6 +148,7 @@ exports.BANDS = BANDS;
 exports.bandOf = bandOf;
 exports.lookupGroups = lookupGroups;
 exports.matcher = matcher;
+exports.withCity = withCity;
 exports.ruDate = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 exports.PCT_STYLE = { good: 'pctGood', mid: 'pctMid', bad: 'pctBad' };
 

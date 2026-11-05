@@ -126,6 +126,7 @@ test('тесты → по преподавателям и посещаемост
     `INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, lesson_date, slot, payload, progress, status) VALUES (?,?,?,?,?,?,?,?,?)`,
     [h.uuid(), teacher, group, `G${group}`, date, slot, JSON.stringify({ topic: 'x', testTypeId: 132, students, ...extra }), '[]', 'done']);
   const st = (id, name, status, hw = 5) => ({ id, name, status, ...(status === 'present' ? { skills: { 8: 45, 13: hw, 9: hw, 10: hw } } : {}) });
+  h.mock.state.rosters['1'] = ['1', '2', '3'].map(id => ({ StudentClientId: Number(id), BeginDate: '2026-01-01' }));   // все трое сейчас в группе
   // Иванова, группа 1: Аня — 5/5 и 4/5 (90%), Боря — 1 пропуск из 2 и 70% (+ доп. тест 66/152 → в среднем 57%), Вика — 3/5 (60%).
   await insert(local, '1', '2026-09-07', 1, [st('1', 'Аня', 'present'), st('2', 'Боря', 'absent'), st('3', 'Вика', 'present', 3)]);
   await insert(local, '1', '2026-09-09', 1, [st('1', 'Аня', 'present', 4), { ...st('2', 'Боря', 'present', 3.5),
@@ -161,13 +162,36 @@ test('тесты → по преподавателям и посещаемост
   assert.match(attFile['xl/worksheets/sheet6.xml'], /Боря.*G1.*Вика/s);
   assert.match((await xlsxOf(`tests?${range}&attendanceTeacher=${foreign}`))['xl/worksheets/sheet5.xml'], /Smith John/);
 
-  // Фильтры: преподаватель, филиал, уровень — на всех вкладках; варианты фильтров — за весь период.
+  // Фильтры: преподаватель, город, уровень — на всех вкладках; варианты фильтров — за весь период.
   assert.deepEqual(res.options.teachers.map(t => t.name), ['Иванова Анна', 'Smith John']);
-  assert.deepEqual([res.options.branches, res.options.levels], [['—'], ['—']]);           // без филиала и уровня в отметке и в HollyHop
+  assert.deepEqual([res.options.cities, res.options.levels], [['—'], ['—']]);           // без филиала и уровня в отметке и в HollyHop
   const onlySmith = (await get(`/admin-api/export/tests?${range}&teacher=${foreign}`)).json;
   assert.deepEqual([onlySmith.byTeacher, onlySmith.sheets.length, onlySmith.filters.teacher], [[], 0, String(foreign)]);
   assert.deepEqual([onlySmith.attendance.scopes[0].students, onlySmith.attendance.scopes[0].counts.one], [2, 2]);   // Аня и Вика — по пропуску у Smith
-  const abaya = (await get(`/admin-api/export/tests?${range}&branch=${encodeURIComponent('Абая')}`)).json;
+  const abaya = (await get(`/admin-api/export/tests?${range}&city=${encodeURIComponent('Алматы')}`)).json;
   assert.deepEqual([abaya.byTeacher.length, abaya.attendance.scopes[0].students, abaya.options.teachers.length], [0, 0, 2]);
   assert.equal((await get(`/admin-api/export/tests?${range}&level=${encodeURIComponent('—')}`)).json.byTeacher.length, 1);
+});
+
+test('посещаемость: только текущие группы ученика (GetEdUnitStudents), уроки всех групп ученика — одной строкой', async () => {
+  const insert = (group, date, students) => h.db.query(
+    `INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, lesson_date, slot, payload, progress, status) VALUES (?,?,?,?,?,?,?,?,?)`,
+    [h.uuid(), local, group, `G${group}`, date, 1, JSON.stringify({ topic: 'x', testTypeId: 132, students }), '[]', 'done']);
+  const st = (id, name, status) => ({ id, name, status });
+  const now = { BeginDate: '2026-01-01' }, gone = { BeginDate: '2026-01-01', EndDate: '2026-09-15' };
+  // Группа 71 — Гуля и Даня учатся сейчас; группа 72 — Гуля учится, Даня ушёл (EndDate прошла); группа 73 — Ерлан без BeginDate.
+  h.mock.state.rosters['71'] = [{ StudentClientId: 701, ...now }, { StudentClientId: 702, ...now }];
+  h.mock.state.rosters['72'] = [{ StudentClientId: 701, ...now }, { StudentClientId: 702, ...gone }];
+  h.mock.state.rosters['73'] = [{ StudentClientId: 703 }];
+  await insert('71', '2026-10-05', [st('701', 'Гуля', 'absent'), st('702', 'Даня', 'present')]);
+  await insert('72', '2026-10-06', [st('701', 'Гуля', 'present'), st('702', 'Даня', 'absent')]);
+  await insert('73', '2026-10-07', [st('703', 'Ерлан', 'absent')]);
+  // Группу 71 переименовали в HollyHop: в старой отметке прежнее название — в отчёте одна группа с последним названием.
+  await h.db.query(`UPDATE submissions SET group_name = 'G71 old' WHERE group_id = '71'`);
+  await insert('71', '2026-10-08', [st('701', 'Гуля', 'present')]);
+
+  const all = (await get('/admin-api/export/tests?from=2026-10-05&to=2026-10-11')).json.attendance.scopes[0];
+  assert.equal(all.students, 2);                                                   // Ерлан не в составе — не считается
+  assert.deepEqual(all.rows.map(r => [r.student, r.group, r.lessons, r.absent, r.rate]), [['Гуля', 'G71, G72', 3, 1, 0.3333]]);   // пропуск Дани в старой группе не засчитан
+  assert.deepEqual(all.counts, { one: 1, two: 0, p15: 1, p30: 1, p50: 0 });
 });

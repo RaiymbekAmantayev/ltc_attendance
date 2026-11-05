@@ -45,3 +45,33 @@ test('заголовки безопасности и healthcheck', async () => {
   const me = await api.request('GET', '/api/me');
   assert.equal(me.headers.get('cache-control'), 'no-store');
 });
+
+test('обзор: фильтр по городу, уроки без отметки по расписанию, доп. тесты ≥80%', async () => {
+  const personalTests = require('../src/config/personalTests');
+  const t = await h.addTeacher({ hollihop_id: '901', full_name: 'Обзор Тест', branch: 'Абая' });
+  const type = personalTests.find(1, 1).type;
+  const score = share => Object.fromEntries(type.skills.map(k => [k.id, Math.round(k.max * share)]));
+  const insert = (group, branch, students, extra = {}) => h.db.query(
+    `INSERT INTO submissions (idem_key, teacher_id, group_id, group_name, branch, lesson_date, slot, payload, progress, status) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [h.uuid(), t, group, `G${group}`, branch, '2026-10-12', 1, JSON.stringify({ topic: 'x', students, ...extra }), '[]', 'done']);
+  // Понедельник 12.10: в демо-HollyHop у Абая (офис 7 — Алматы) уроки 9001, 9003, 9005, 31; у Хайвилла (Астана) — 9002.
+  await insert('9001', 'Абая', [{ id: '1', status: 'present', personalSkills: score(1) }, { id: '2', status: 'present', personalSkills: score(0.5) }],
+    { personal: { categoryId: 1, testTypeId: 1 } });
+  await insert('9002', 'Хайвилл', [{ id: '3', status: 'absent' }]);
+  const get = async url => (await api.request('GET', `/admin-api/${url}`, { admin: true })).json;
+  const range = 'from=2026-10-12&to=2026-10-12';
+
+  const almaty = await get(`overview?${range}&city=${encodeURIComponent('Алматы')}`);
+  assert.deepEqual([almaty.kpi.lessonsMarked, almaty.attendance.present, almaty.attendance.absent], [1, 2, 0]);
+  assert.deepEqual(almaty.kpi.personalTests, { count: 2, good: 1, rate: 50 });
+  const astana = await get(`overview?${range}&city=${encodeURIComponent('Астана')}`);
+  assert.deepEqual([astana.kpi.lessonsMarked, astana.attendance.absent, astana.kpi.personalTests.count], [1, 1, 0]);
+  assert.equal((await get(`overview?${range}`)).kpi.lessonsMarked, 2);
+
+  assert.deepEqual(await get(`overview/unmarked?${range}&city=${encodeURIComponent('Алматы')}`), { expected: 4, marked: 1, unmarked: 3 });
+  assert.deepEqual(await get(`overview/unmarked?${range}&city=${encodeURIComponent('Астана')}`), { expected: 1, marked: 1, unmarked: 0 });
+  assert.deepEqual(await get(`overview/unmarked?${range}`), { expected: 5, marked: 2, unmarked: 3 });
+
+  const ts = await get(`teacher-stats?${range}&city=${encodeURIComponent('Астана')}`);
+  assert.equal(ts.find(x => x.id === t).lessons, 1);                                         // в Астане — только урок Хайвилла
+});

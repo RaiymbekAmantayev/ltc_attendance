@@ -86,10 +86,10 @@ exports.submissions = async (from, to) => {
 };
 
 /** Тесты учеников за период: доп. тесты по категориям, средние ежедневного теста, средний % учеников по преподавателям и посещаемость.
- * query — фильтры branch, level, teacher (пусто — все). */
+ * query — фильтры city, level, teacher (пусто — все). */
 exports.tests = async (from, to, query = {}) => {
   exports.period(from, to, TESTS_MAX_DAYS);
-  const filters = { branch: String(query.branch || ''), level: String(query.level || ''), teacher: String(query.teacher || '') };
+  const filters = { city: String(query.city || ''), level: String(query.level || ''), teacher: String(query.teacher || '') };
   const [rep, byTeacher, attendance] = await Promise.all([
     testsExport.report(from, to, filters), studentReports.results(from, to, filters), studentReports.attendance(from, to, filters)]);
   return { ...rep, byTeacher, attendance };

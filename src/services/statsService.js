@@ -8,6 +8,31 @@ const { lowFillThreshold } = require('../config/env');
 const { todayIso, addDays, localDayOf, monthStart } = require('../lib/date');
 
 const testing = require('../config/testing');
+const personalTests = require('../config/personalTests');
+
+/** Отметки города (по филиалу отметки); city пусто — все. */
+const inCity = async (rows, city) => {
+  if (!city) return rows;
+  const cityOf = await hollihop.cityResolver();
+  return rows.filter(r => cityOf(r.branch) === city);
+};
+
+/** Доп. (персональные) тесты учеников, без ежедневного: сколько всего и сколько ≥80% от максимума. */
+function personalTestsOf(rows) {
+  let count = 0, good = 0;
+  for (const row of rows) {
+    const p = Submission.parse(row.payload);
+    const found = p.personal && personalTests.find(p.personal.categoryId, p.personal.testTypeId);
+    if (!found) continue;
+    const max = found.type.skills.reduce((a, k) => a + k.max, 0);
+    for (const s of p.students) {
+      if (!s.personalSkills || !max) continue;
+      count++;
+      if (Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0) / max >= 0.8) good++;
+    }
+  }
+  return { count, good, rate: pct(good, count) };
+}
 
 /** Результат теста ученика, % от максимума: среднее по навыкам. */
 const studentTestPct = (skills, typeId) => {
@@ -61,9 +86,10 @@ function groupBy(rows, keyOf) {
 
 /* ---------------- Обзор ---------------- */
 
-exports.overview = async ({ from, to }) => {
-  const rows = await Submission.list({ from, to });
-  const teachers = await Teacher.findActive();
+exports.overview = async ({ from, to, city }) => {
+  const rows = await inCity(await Submission.list({ from, to }), city);
+  let teachers = await Teacher.findActive();
+  if (city) { const cityOf = await hollihop.cityResolver(); teachers = teachers.filter(t => cityOf(t.branch) === city); }
   const att = attendanceOf(rows);
   const counts = statusCounts(rows);
 
@@ -79,10 +105,12 @@ exports.overview = async ({ from, to }) => {
     period: { from, to },
     kpi: {
       lessons: rows.length,
+      lessonsMarked: new Set(rows.map(r => `${r.group_id}:${r.lesson_date}`)).size,   // уроков (группа + дата): на урок бывает две отметки
       students: att.students,
       attendanceRate: att.rate,
       avgTest: att.avgTest,
       testPassRate: att.testPassRate,
+      personalTests: personalTestsOf(rows),                               // доп. тесты: всего и ≥80%
       onTimeRate: pct(rows.filter(onTime).length, rows.length),
       syncedRate: pct(counts.done || 0, rows.length),
       activeTeachers: teachers.filter(t => t.role === 'teacher' && t.hollihop_id).length,
@@ -99,9 +127,25 @@ exports.overview = async ({ from, to }) => {
   };
 };
 
-/** Кто сегодня ещё не отметил занятие: расписание из HollyHop минус наши отметки. */
-exports.todayBoard = async (date = todayIso()) => {
-  const [groups, rows, subs] = await Promise.all([hollihop.groupsOnDate(date), Submission.list({ date }), Substitution.forDate(date)]);
+/**
+ * Занятия без отметки за период: уроки по расписанию HollyHop (до сегодня включительно) минус уроки с отметкой.
+ * Урок — группа + дата; city — только группы города.
+ */
+exports.unmarked = async ({ from, to, city }) => {
+  const end = to < todayIso() ? to : todayIso();
+  if (from > end) return { expected: 0, marked: 0, unmarked: 0 };
+  const [lessons, rows] = await Promise.all([hollihop.lessonsInRange(from, end), Submission.list({ from, to: end })]);
+  const expected = new Set(lessons.filter(l => !city || l.city === city).map(l => `${l.groupId}:${l.date}`));
+  const marked = new Set(rows.map(r => `${r.group_id}:${r.lesson_date}`));
+  let unmarked = 0;
+  for (const key of expected) if (!marked.has(key)) unmarked++;
+  return { expected: expected.size, marked: expected.size - unmarked, unmarked };
+};
+
+/** Кто сегодня ещё не отметил занятие: расписание из HollyHop минус наши отметки; city — только группы города. */
+exports.todayBoard = async (date = todayIso(), city = '') => {
+  const [all, rows, subs] = await Promise.all([hollihop.groupsOnDate(date), Submission.list({ date }), Substitution.forDate(date)]);
+  const groups = city ? all.filter(g => g.city === city) : all;
   const marked = new Map(rows.map(r => [r.group_id, r]));
   const subBy = new Map(subs.map(s => [String(s.group_id), s.full_name]));
   const pending = groups.filter(g => !marked.has(g.id)).map(g => ({
@@ -163,10 +207,13 @@ exports.groupDetail = async (groupId, { from, to }) => {
 
 /* ---------------- Преподаватели ---------------- */
 
-exports.teachers = async ({ from, to }) => {
-  const [staff, rows] = await Promise.all([Teacher.findAll(), Submission.list({ from, to })]);
+exports.teachers = async ({ from, to, city }) => {
+  const [staff, all] = await Promise.all([Teacher.findAll(), Submission.list({ from, to })]);
+  const rows = await inCity(all, city);
   const byTeacher = groupBy(rows, r => r.teacher_id);
-  return staff.filter(t => t.role === 'teacher' || byTeacher.has(t.id)).map(t => {
+  const cityOf = city ? await hollihop.cityResolver() : null;
+  const ofCity = t => !city || cityOf(t.branch) === city;               // город преподавателя — по его филиалу в HollyHop
+  return staff.filter(t => (t.role === 'teacher' && ofCity(t)) || byTeacher.has(t.id)).map(t => {
     const list = byTeacher.get(t.id) || [];
     const counts = statusCounts(list);
     const att = attendanceOf(list);
