@@ -46,6 +46,14 @@ test('заголовки безопасности и healthcheck', async () => {
   assert.equal(me.headers.get('cache-control'), 'no-store');
 });
 
+test('ФИО учеников группы для старых отметок: включая выбывших', async () => {
+  const r = await api.request('GET', '/admin-api/student-names?groupId=31', { admin: true });
+  assert.equal(r.status, 200);
+  assert.equal(r.json[3198], 'Выбывший Ученик');
+  assert.equal((await api.request('GET', '/admin-api/student-names?groupId=abc', { admin: true })).status, 400);
+  assert.equal((await api.request('GET', '/admin-api/student-names?groupId=31')).status, 401);
+});
+
 test('обзор: фильтр по городу, уроки без отметки по расписанию, доп. тесты ≥80%', async () => {
   const personalTests = require('../src/config/personalTests');
   const t = await h.addTeacher({ hollihop_id: '901', full_name: 'Обзор Тест', branch: 'Абая' });

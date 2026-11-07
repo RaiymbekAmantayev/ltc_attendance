@@ -125,5 +125,12 @@ exports.studentIds = async (req, res) => {
   res.json(await hollihop.studentIds(ids));
 };
 
+/** ФИО учеников группы по ClientId (?groupId=1), включая выбывших, — для старых отметок без сохранённого ФИО. */
+exports.studentNames = async (req, res) => {
+  const groupId = String(req.query.groupId || '');
+  if (!/^\d+$/.test(groupId)) throw new AppError(400, 'bad_request');
+  res.json(Object.fromEntries((await hollihop.allStudents(groupId)).map(s => [s.id, s.name])));
+};
+
 exports.retrySubmission = async (req, res) => res.json(await submissions.retry(req.params.key, ACTOR));
 exports.listAudit = async (req, res) => res.json(await Audit.latest({ action: req.query.action || null }));

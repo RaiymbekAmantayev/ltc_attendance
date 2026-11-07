@@ -343,12 +343,15 @@
       <div class="mrow"><span class="k">Шагов записано</span><span class="v">${pr.length}</span></div>
       <div class="mrow"><span class="k">Попыток подряд</span><span class="v">${x.attempts}</span></div>
       <div class="msec-title">Ученики (ID HollyHop)</div>
-      <div class="tscroll"><table><tr><th class="left">ID</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
-      ${p.students.map(s => `<tr><td class="left"><span data-hh-id="${esc(s.id)}">…</span><br><span class="mut">ClientId ${esc(s.id)}</span></td><td class="left">${label[s.status]}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
+      <div class="tscroll"><table><tr><th class="left">ID</th><th class="left">ФИО</th><th class="left">Статус</th><th class="left">Тест (навык: балл)</th>${p.personal ? '<th class="left">Доп. тест</th>' : ''}<th class="left">Комментарий</th></tr>
+      ${p.students.map(s => `<tr><td class="left"><span data-hh-id="${esc(s.id)}">…</span><br><span class="mut">ClientId ${esc(s.id)}</span></td><td class="left">${s.name ? esc(s.name) : `<span data-hh-name="${esc(s.id)}">…</span>`}</td><td class="left">${label[s.status]}</td><td class="left">${s.skills ? Object.entries(s.skills).map(([k, v]) => `${skillName(p.testTypeId, k)}: ${v}`).join(' · ') : '—'}</td>${p.personal ? `<td class="left">${esc(personalScores(s))}</td>` : ''}<td class="left">${esc(s.comment)}</td></tr>`).join('')}</table></div>`);
     // В отметке хранится ClientId (по нему идёт запись в HollyHop); Id ученика подтягиваем отдельно.
     api('/student-ids?clientIds=' + p.students.map(s => s.id).join(','))
       .then(ids => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = ids[el.dataset.hhId] ?? '—'; }))
       .catch(() => document.querySelectorAll('[data-hh-id]').forEach(el => { el.textContent = '—'; }));
+    // Старые отметки ФИО не хранят — берём из состава группы в HollyHop.
+    const fillNames = (names = {}) => document.querySelectorAll('[data-hh-name]').forEach(el => { el.textContent = names[el.dataset.hhName] || '—'; });
+    if (p.students.some(s => !s.name)) api('/student-names?groupId=' + encodeURIComponent(x.group_id)).then(fillNames).catch(() => fillNames());
   });
   on(root, 'click', '[data-act="xlsx-subm"]', async el => {
     // Id учеников HollyHop по ClientId — пачками (endpoint принимает до 300 за раз); не получилось — колонка пустая.
