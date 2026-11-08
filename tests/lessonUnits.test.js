@@ -1,6 +1,7 @@
 // Сколько уроков засчитывать: занятие от 90 минут — за два; у старых отметок длительность — из расписания HollyHop.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+require('./helpers');                                    // тестовое окружение (BOT_TOKEN, DATABASE_URL, HH_MOCK) — в CI нет .env
 const hollihop = require('../src/services/hollihopService');
 const units = require('../src/services/lessonUnitsService');
 
