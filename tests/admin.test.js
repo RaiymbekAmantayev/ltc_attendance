@@ -81,5 +81,5 @@ test('обзор: фильтр по городу, уроки без отметк
   assert.deepEqual(await get(`overview/unmarked?${range}`), { expected: 5, marked: 2, unmarked: 3 });
 
   const ts = await get(`teacher-stats?${range}&city=${encodeURIComponent('Астана')}`);
-  assert.equal(ts.find(x => x.id === t).lessons, 1);                                         // в Астане — только урок Хайвилла
+  assert.equal(ts.find(x => x.id === t).lessons, 2);   // в Астане — только урок Хайвилла; у старой отметки длительность из расписания: 90 минут — два урока
 });

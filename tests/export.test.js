@@ -33,14 +33,14 @@ test('расписание: уроки по группам по дням, ак. 
   assert.equal(rep.days.length, 7);
   assert.deepEqual(rep.sheets.map(s => s.key), ['foreign', 'local']);
   const [ivanova, satpaeva] = rep.sheets.find(s => s.key === 'local').rows;
-  // 31 — каждый день 09:00–10:00, 9001 — Пн/Ср/Пт 10:00–11:30, 9003 — будни 15:00–16:30
+  // 31 — каждый день 09:00–10:00, 9001 — Пн/Ср/Пт 10:00–11:30, 9003 — будни 15:00–16:30; занятие от 90 минут — два урока
   assert.equal(ivanova.name, 'Иванова Анна');
   assert.equal(ivanova.position, 'преподаватель');
-  assert.equal(ivanova.counts[MON], 3); assert.equal(ivanova.counts['2026-10-13'], 2); assert.equal(ivanova.counts[SUN], 1);
-  assert.equal(ivanova.lessons, 15);
+  assert.equal(ivanova.counts[MON], 5); assert.equal(ivanova.counts['2026-10-13'], 3); assert.equal(ivanova.counts[SUN], 1);
+  assert.equal(ivanova.lessons, 23);                     // 7·1 + 3·2 + 5·2
   assert.equal(ivanova.hours, 25.33);                     // (7·60 + 3·90 + 5·90) / 45
-  assert.deepEqual(rep.sheets.find(s => s.key === 'foreign').rows.map(r => [r.name, r.lessons]), [['Smith John', 3]]);
-  assert.deepEqual([satpaeva.name, satpaeva.lessons], ['Сатпаева Алия', 8]);   // нет в реестре: имя из GetTeachers, лист — по кириллице
+  assert.deepEqual(rep.sheets.find(s => s.key === 'foreign').rows.map(r => [r.name, r.lessons]), [['Smith John', 6]]);
+  assert.deepEqual([satpaeva.name, satpaeva.lessons], ['Сатпаева Алия', 11]);   // 9004 — 3·2, 9005 (60 мин) — 5·1; нет в реестре: имя из GetTeachers, лист — по кириллице
   const { sheetOf } = require('../src/services/exportService');
   assert.deepEqual(['Udochukwu John Kennedy', 'Әлия Қасымова', 'Smith Джон'].map(sheetOf), ['foreign', 'local', 'local']);
 });
@@ -61,7 +61,7 @@ test('фактические отметки: кто отметил — по дн
   assert.equal(saved.json.status, 'done');
   const rep = (await get(`/admin-api/export/submissions?from=${MON}&to=${SUN}`)).json;
   assert.deepEqual(rep.sheets.map(s => s.key), ['foreign', 'local']);
-  assert.deepEqual(rep.sheets[1].rows.map(r => [r.name, r.counts[h.WED], r.lessons]), [['Иванова Анна', 1, 1]]);
+  assert.deepEqual(rep.sheets[1].rows.map(r => [r.name, r.counts[h.WED], r.lessons]), [['Иванова Анна', 2, 2]]);   // 9001 идёт 90 минут — два урока
 
   const file = await fetch(`${api.base}/admin-api/export/schedule?from=${MON}&to=${SUN}&format=xlsx`, { headers: { authorization: 'Basic ' + Buffer.from('admin:secret').toString('base64') } });
   assert.match(file.headers.get('content-type'), /spreadsheetml/);

@@ -8,6 +8,7 @@ const testing = require('../config/testing');
 const personalTests = require('../config/personalTests');
 const coins = require('../config/coins');
 const Ktp = require('../models/ktpModel');
+const lessonUnits = require('./lessonUnitsService');
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ATTEMPTS = 8;                                  // после стольких неудач подряд — «нужно внимание»
@@ -89,6 +90,7 @@ exports.save = async (teacher, { key, groupId, date, topic, homework, ktpTopicId
     homework: cleanHomework,                                               // в HollyHop — под темой: «Дз/Hw: …»
     ktpTopicId: ktpTopic ? ktpTopic.id : null,
     level: group.level || '',                                              // для выгрузки тестов по уровням
+    minutes: lessonUnits.minutesOfTime(group.time),                        // длительность: от 90 минут урок считается за два
     testTypeId: exports.testTypeFor(teacher),
     coins: true,                                                           // начислять коины (старые отметки — без них)
     dateTime: testDateTime(date, group), teacherId: teacher.hollihop_id ? Number(teacher.hollihop_id) : null,

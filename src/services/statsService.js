@@ -4,6 +4,7 @@ const Submission = require('../models/submissionModel');
 const Substitution = require('../models/substitutionModel');
 const Teacher = require('../models/teacherModel');
 const substitutionService = require('./substitutionService');
+const lessonUnits = require('./lessonUnitsService');
 const { lowFillThreshold } = require('../config/env');
 const { todayIso, addDays, localDayOf, monthStart } = require('../lib/date');
 
@@ -212,6 +213,7 @@ exports.teachers = async ({ from, to, city }) => {
   const rows = await inCity(all, city);
   const byTeacher = groupBy(rows, r => r.teacher_id);
   const cityOf = city ? await hollihop.cityResolver() : null;
+  const unitsOf = await lessonUnits.forSubmissions(rows);               // занятие от 90 минут — два урока
   const ofCity = t => !city || cityOf(t.branch) === city;               // город преподавателя — по его филиалу в HollyHop
   return staff.filter(t => (t.role === 'teacher' && ofCity(t)) || byTeacher.has(t.id)).map(t => {
     const list = byTeacher.get(t.id) || [];
@@ -219,7 +221,7 @@ exports.teachers = async ({ from, to, city }) => {
     const att = attendanceOf(list);
     return {
       id: t.id, name: t.full_name, branch: t.branch, lang: t.lang, active: !!t.active, hasTelegram: !!t.telegram_id,
-      lessons: list.length,
+      lessons: list.reduce((n, r) => n + unitsOf(r), 0),
       students: att.students,
       attendance: att.rate,
       onTime: pct(list.filter(onTime).length, list.length),
@@ -238,9 +240,10 @@ exports.profile = async teacher => {
   const rows = teacher.id ? await Submission.list({ from, to: today, teacherId: teacher.id }) : [];
   const counts = statusCounts(rows);
   const att = attendanceOf(rows);
+  const unitsOf = await lessonUnits.forSubmissions(rows);               // занятие от 90 минут — два урока
   return {
     month: from.slice(0, 7),
-    lessons: rows.length,
+    lessons: rows.reduce((n, r) => n + unitsOf(r), 0),
     students: att.students,
     attendanceRate: att.rate,
     avgTest: att.avgTest,

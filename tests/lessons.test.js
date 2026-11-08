@@ -200,9 +200,9 @@ test('аудит-лог пишет автора, а профиль считае�
   const list = (await students('9001')).map(s => ({ id: s.id, status: 'late', skills: DAILY }));
   // для профиля нужна отметка «сегодняшнего» месяца: записываем напрямую
   await h.db.query(`INSERT INTO submissions (idem_key, teacher_id, group_id, lesson_date, payload, progress, status)
-    VALUES (?,?,?,?,?,?,?)`, [h.uuid(), t1, '9001', today, JSON.stringify({ topic: '', students: list }), '[]', 'done']);
+    VALUES (?,?,?,?,?,?,?)`, [h.uuid(), t1, '9001', today, JSON.stringify({ topic: '', minutes: 90, students: list }), '[]', 'done']);
   const profile = (await api.request('GET', '/api/profile', { tg: TG.teacher })).json;
-  assert.equal(profile.lessons, 1);
+  assert.equal(profile.lessons, 2, 'занятие от 90 минут — два урока');
   assert.equal(profile.attendanceRate, 100);
   assert.equal(profile.checklist.done, 1);
   await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9001', list) });

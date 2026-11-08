@@ -8,6 +8,7 @@ const Teacher = require('../models/teacherModel');
 const xlsx = require('../lib/xlsx');
 const testsExport = require('./testsExportService');
 const studentReports = require('./studentReportsService');
+const lessonUnits = require('./lessonUnitsService');
 const { isDate, addDays } = require('../lib/date');
 const { AppError } = require('../middleware/errorHandler');
 
@@ -63,8 +64,9 @@ exports.schedule = async (from, to) => {
       const teacher = byHollihopId.get(id);
       if (!rows.has(id)) rows.set(id, newRow(teacher, teacher?.full_name || hhNames.get(id) || l.teacherNames[i] || `HollyHop ID ${id}`));
       const row = rows.get(id);
-      row.counts[l.date] = (row.counts[l.date] || 0) + 1;
-      row.lessons++;
+      const units = lessonUnits.unitsOf(l.minutes);     // занятие от 90 минут — два урока
+      row.counts[l.date] = (row.counts[l.date] || 0) + units;
+      row.lessons += units;
       row.minutes += l.minutes;
     });
   }
@@ -75,12 +77,14 @@ exports.schedule = async (from, to) => {
 exports.submissions = async (from, to) => {
   const days = exports.period(from, to);
   const rows = new Map();
-  for (const s of await Submission.list({ from, to })) {
+  const list = await Submission.list({ from, to });
+  const unitsOf = await lessonUnits.forSubmissions(list);   // занятие от 90 минут — два урока
+  for (const s of list) {
     const key = String(s.teacher_id);
     if (!rows.has(key)) rows.set(key, newRow({ lang: s.teacher_lang, role: s.teacher_role }, s.full_name));
-    const row = rows.get(key);
-    row.counts[s.lesson_date] = (row.counts[s.lesson_date] || 0) + 1;
-    row.lessons++;
+    const row = rows.get(key), units = unitsOf(s);
+    row.counts[s.lesson_date] = (row.counts[s.lesson_date] || 0) + units;
+    row.lessons += units;
   }
   return report('submissions', from, to, days, rows);
 };
