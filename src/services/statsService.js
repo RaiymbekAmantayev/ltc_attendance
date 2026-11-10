@@ -18,21 +18,30 @@ const inCity = async (rows, city) => {
   return rows.filter(r => cityOf(r.branch) === city);
 };
 
-/** Доп. (персональные) тесты учеников, без ежедневного: сколько всего и сколько ≥80% от максимума. */
+/**
+ * Доп. (персональные) тесты учеников, без ежедневного: сколько всего и сколько ≥80% от максимума;
+ * byCategory — то же по каждой категории (Progress Test, Final Test, …) в порядке справочника.
+ */
 function personalTestsOf(rows) {
-  let count = 0, good = 0;
+  const total = { count: 0, good: 0 };
+  const byId = new Map(personalTests.categories.map(c => [c.id, { id: c.id, name: c.name, count: 0, good: 0 }]));
   for (const row of rows) {
     const p = Submission.parse(row.payload);
     const found = p.personal && personalTests.find(p.personal.categoryId, p.personal.testTypeId);
     if (!found) continue;
     const max = found.type.skills.reduce((a, k) => a + k.max, 0);
+    const cat = byId.get(found.category.id);
     for (const s of p.students) {
       if (!s.personalSkills || !max) continue;
-      count++;
-      if (Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0) / max >= 0.8) good++;
+      const good = Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0) / max >= 0.8 ? 1 : 0;
+      total.count++; total.good += good;
+      cat.count++; cat.good += good;
     }
   }
-  return { count, good, rate: pct(good, count) };
+  return {
+    ...total, rate: pct(total.good, total.count),
+    byCategory: [...byId.values()].map(c => ({ ...c, rate: pct(c.good, c.count) })),
+  };
 }
 
 /** Результат теста ученика, % от максимума: среднее по навыкам. */
@@ -143,15 +152,23 @@ exports.unmarked = async ({ from, to, city }) => {
   return { expected: expected.size, marked: expected.size - unmarked, unmarked };
 };
 
+/** Замены дня по группам: group_id → [замена]. */
+const groupSubs = subs => {
+  const by = new Map();
+  for (const s of subs) { const k = String(s.group_id); if (!by.has(k)) by.set(k, []); by.get(k).push(s); }
+  return by;
+};
+
 /** Кто сегодня ещё не отметил занятие: расписание из HollyHop минус наши отметки; city — только группы города. */
 exports.todayBoard = async (date = todayIso(), city = '') => {
   const [all, rows, subs] = await Promise.all([hollihop.groupsOnDate(date), Submission.list({ date }), Substitution.forDate(date)]);
   const groups = city ? all.filter(g => g.city === city) : all;
   const marked = new Map(rows.map(r => [r.group_id, r]));
-  const subBy = new Map(subs.map(s => [String(s.group_id), s.full_name]));
-  const pending = groups.filter(g => !marked.has(g.id)).map(g => ({
-    id: g.id, name: g.name, branch: g.branch, time: g.time, teacher: subBy.get(g.id) || g.teacher, substitution: subBy.has(g.id),
-  }));
+  const subBy = groupSubs(subs);
+  const pending = groups.filter(g => !marked.has(g.id)).map(g => {
+    const list = subBy.get(g.id) || [];
+    return { id: g.id, name: g.name, branch: g.branch, time: g.time, teacher: substitutionService.teacherLine(g, list), substitution: list.length > 0 };
+  });
   return { date, expected: groups.length, marked: groups.length - pending.length, pending };
 };
 
@@ -162,16 +179,18 @@ exports.groups = async date => {
     hollihop.groupsOnDate(date).then(substitutionService.withMainTeacher), Submission.list({ date }), Substitution.forDate(date),
   ]);
   const byGroup = new Map(summary.map(r => [r.group_id, r]));
-  const subBy = new Map(subs.map(s => [String(s.group_id), s.full_name]));
+  const subBy = groupSubs(subs);
   return groups.map(g => {
-    const sub = byGroup.get(g.id);
+    const sub = byGroup.get(g.id), list = subBy.get(g.id) || [];
     return {
       ...g,
       lowFill: g.students != null && g.students < lowFillThreshold,
       overfull: g.vacancies != null && g.vacancies < 0,
       status: sub?.status || 'none',
-      substitute: subBy.get(g.id) || null,
-      replaces: subBy.has(g.id) ? g.teacher || null : null,                // кого заменяют
+      // у слота — кто его заменяет (null — свободен для замены)
+      slots: (g.slots || []).map(slot => ({ ...slot, substitute: list.find(s => String(s.replaced_hh_id) === slot.teacherId)?.full_name || null })),
+      substitute: list.map(s => s.full_name).join(', ') || null,
+      replaces: list.map(s => substitutionService.replacedName(g, s)).filter(Boolean).join(', ') || null,   // кого заменяют
     };
   });
 };

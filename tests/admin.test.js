@@ -71,7 +71,11 @@ test('обзор: фильтр по городу, уроки без отметк
 
   const almaty = await get(`overview?${range}&city=${encodeURIComponent('Алматы')}`);
   assert.deepEqual([almaty.kpi.lessonsMarked, almaty.attendance.present, almaty.attendance.absent], [1, 2, 0]);
-  assert.deepEqual(almaty.kpi.personalTests, { count: 2, good: 1, rate: 50 });
+  const { byCategory, ...total } = almaty.kpi.personalTests;
+  assert.deepEqual(total, { count: 2, good: 1, rate: 50 });
+  assert.deepEqual(byCategory.map(c => c.name), personalTests.categories.map(c => c.name), 'карточка на каждую категорию');
+  assert.deepEqual(byCategory.find(c => c.id === 1), { id: 1, name: 'Progress Test', count: 2, good: 1, rate: 50 });
+  assert.ok(byCategory.filter(c => c.id !== 1).every(c => c.count === 0));
   const astana = await get(`overview?${range}&city=${encodeURIComponent('Астана')}`);
   assert.deepEqual([astana.kpi.lessonsMarked, astana.attendance.absent, astana.kpi.personalTests.count], [1, 1, 0]);
   assert.equal((await get(`overview?${range}`)).kpi.lessonsMarked, 2);

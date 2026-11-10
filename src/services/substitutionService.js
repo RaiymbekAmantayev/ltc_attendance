@@ -9,14 +9,22 @@ const minutes = time => {
 };
 const overlap = (a, b) => minutes(a.from) < minutes(b.to) && minutes(b.from) < minutes(a.to);
 
+/** Строки расписания, которые закрывает замена: слот заменяемого преподавателя; без него (старые замены) — вся группа. */
+const coveredItems = (schedule, groupId, replacedHhId) => {
+  const group = schedule.filter(x => x.groupId === String(groupId));
+  const own = replacedHhId ? group.filter(x => x.teacherIds.includes(String(replacedHhId))) : [];
+  return own.length ? own : group;
+};
+
 /**
- * Кто из преподавателей занят во время занятия группы в эту дату: { teacherId: [{groupId, group, time}] }.
- * Занят — своё занятие по расписанию HollyHop (в том числе эта же группа) или уже назначенная замена в другой группе, пересекающиеся по времени.
+ * Кто из преподавателей занят во время замены: { teacherId: [{groupId, group, time}] }.
+ * Время замены — слот заменяемого (replacedHhId), иначе всё занятие группы в эту дату.
+ * Занят — своё занятие по расписанию HollyHop или уже назначенная замена, пересекающиеся по времени.
  * Преподаватели без HollyHop ID по расписанию не проверяются.
  */
-exports.busyTeachers = async (groupId, date) => {
+exports.busyTeachers = async (groupId, date, replacedHhId = null) => {
   const [schedule, subs, staff] = await Promise.all([hollihop.scheduleOnDate(date), Substitution.forDate(date), Teacher.findActive()]);
-  const target = schedule.filter(x => x.groupId === String(groupId));
+  const target = coveredItems(schedule, groupId, replacedHhId);
   const clashes = item => target.some(t => overlap(item, t));
   const byHollihopId = new Map(staff.filter(t => t.hollihop_id).map(t => [String(t.hollihop_id), t.id]));
 
@@ -32,11 +40,26 @@ exports.busyTeachers = async (groupId, date) => {
     for (const id of item.teacherIds) if (byHollihopId.has(id)) add(byHollihopId.get(id), item);
   }
   for (const s of subs) {
-    if (String(s.group_id) === String(groupId)) continue;
-    for (const item of schedule) if (item.groupId === String(s.group_id) && clashes(item)) add(s.substitute_id, item);
+    // та же замена (переназначение) — не занятость
+    if (String(s.group_id) === String(groupId) && (!s.replaced_hh_id || !replacedHhId || String(s.replaced_hh_id) === String(replacedHhId))) continue;
+    for (const item of coveredItems(schedule, s.group_id, s.replaced_hh_id)) if (clashes(item)) add(s.substitute_id, item);
   }
   return busy;
 };
+
+/** Слот заменяемого в группе: {teacherId, teacher, time} или null. */
+exports.slotOf = (group, replacedHhId) =>
+  (replacedHhId && group?.slots?.find(s => s.teacherId === String(replacedHhId))) || null;
+
+/** Кто ведёт группу с учётом замен: в слоте заменяемого — заменяющий; старая замена без слота — на всю группу. */
+exports.teacherLine = (group, subs) => {
+  if (!subs.length) return group.teacher;
+  if (subs.some(s => !exports.slotOf(group, s.replaced_hh_id))) return subs.map(s => s.full_name).join(', ');
+  return group.slots.map(slot => subs.find(s => String(s.replaced_hh_id) === slot.teacherId)?.full_name || slot.teacher).join(', ');
+};
+
+/** Кого заменяют: ФИО из слота, иначе — основной преподаватель группы. */
+exports.replacedName = (group, s) => exports.slotOf(group, s.replaced_hh_id)?.teacher || group?.teacher || '';
 
 /** Группы с ФИО основного преподавателя: из расписания HollyHop, иначе — из реестра по HollyHop ID. */
 exports.withMainTeacher = async groups => {
@@ -46,17 +69,22 @@ exports.withMainTeacher = async groups => {
   return groups.map(g => ({ ...g, teacher: g.teacher || byHollihopId.get(g.teacherId) || '' }));
 };
 
-/** Последние замены с группой из HollyHop: название, филиал, уровень и кого заменяют (replaces). */
+/** Последние замены с группой из HollyHop: название, филиал, уровень, кого заменяют (replaces) и время его слота (time). */
 exports.recent = async () => {
   const subs = await Substitution.findRecent();
-  const ids = [...new Set(subs.map(s => String(s.group_id)))], found = [];
-  for (let i = 0; i < ids.length; i += 4) {
-    found.push(...await Promise.all(ids.slice(i, i + 4).map(id => hollihop.groupById(id).catch(() => null))));
+  const keyOf = s => `${s.group_id}|${String(s.lesson_date).slice(0, 10)}`;
+  const keys = [...new Set(subs.map(keyOf))], found = [];
+  for (let i = 0; i < keys.length; i += 4) {
+    found.push(...await Promise.all(keys.slice(i, i + 4).map(k => {
+      const [id, date] = k.split('|');
+      return hollihop.groupById(id, date).then(g => g && { ...g, key: k }, () => null);
+    })));
   }
-  const groups = new Map((await exports.withMainTeacher(found.filter(Boolean))).map(g => [g.id, g]));
+  const groups = new Map((await exports.withMainTeacher(found.filter(Boolean))).map(g => [g.key, g]));
   return subs.map(s => {
-    const g = groups.get(String(s.group_id));
-    return { ...s, group_name: g?.name || null, branch: g?.branch || '', level: g?.level || '', replaces: g?.teacher || '' };
+    const g = groups.get(keyOf(s)), slot = exports.slotOf(g, s.replaced_hh_id);
+    return { ...s, group_name: g?.name || null, branch: g?.branch || '', level: g?.level || '',
+      replaces: exports.replacedName(g, s), time: slot?.time || g?.time || '' };
   });
 };
 

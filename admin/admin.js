@@ -94,6 +94,10 @@
         <div class="kpi ${LTC.sev(k.attendanceRate)}"><div class="kpi-label">Посещаемость</div><div class="kpi-value">${LTC.pct(k.attendanceRate)}</div><div class="kpi-sub">был ${a.present} · пропуск ${a.absent}</div></div>
         <div class="kpi ${LTC.sev(pt.rate, 60, 80)}"><div class="kpi-label">Тесты ≥80%</div><div class="kpi-value">${LTC.pct(pt.rate)}</div><div class="kpi-sub">${pt.good} из ${pt.count} доп. тестов</div></div>
       </div>
+      <div class="kpi-grid wide">
+        ${(pt.byCategory || []).map(c => `<div class="kpi ${c.count ? LTC.sev(c.rate, 60, 80) : ''}"><div class="kpi-label">${esc(c.name)} ≥80%</div>
+          <div class="kpi-value">${c.count ? LTC.pct(c.rate) : '—'}</div><div class="kpi-sub">${c.count ? `${c.good} из ${c.count} тестов` : 'тестов нет'}</div></div>`).join('')}
+      </div>
       <div class="grid2">
         <div class="card"><div class="card-title">Сегодня ${today.error ? '<span class="chip warn">расписание HollyHop недоступно</span>' : `<span class="chip ${pend.length ? 'warn' : 'good'}">${today.marked} / ${today.expected}</span>`}</div>
           ${today.error ? '' : pend.length ? `<div class="msec-title">Ещё не отмечено</div>` + pend.map(g => `<div class="mrow"><span>${esc(g.name)}<br><span class="mut">${esc([g.branch, g.time].filter(Boolean).join(' · '))}</span></span><span class="v">${esc(g.teacher || '')}${g.substitution ? ' <span class="chip brand">замена</span>' : ''}</span></div>`).join('') : '<p class="hint">Все занятия отмечены</p>'}
@@ -217,7 +221,7 @@
     busy = {};
     main.innerHTML = `
       <div class="card"><div class="card-title">Замена на дату</div>
-        <p class="hint">Заменяющий увидит группу только в этот день. В журнале фиксируется реальный автор отметки.</p>
+        <p class="hint">Заменяющий увидит группу только в этот день. Если в группе два преподавателя, выберите строку того, кого заменяют: замена только на его время. В журнале фиксируется реальный автор отметки.</p>
         <div class="toolbar"><input type="date" id="s-date" value="${LTC.localToday()}"><span id="s-filters" class="row"></span></div>
         <div class="toolbar"><select id="s-group" class="grow"></select><select id="s-teacher" class="grow"></select>
         <button class="btn" data-act="add-sub">Назначить</button></div>
@@ -226,7 +230,7 @@
       <div class="card"><div class="card-title">Последние замены</div>
         ${subs.length ? `<div class="tscroll"><table><tr><th>Дата</th><th class="left">Группа</th><th class="left">Филиал · уровень</th><th class="left">Кого заменяют</th><th class="left">Заменяет</th><th></th></tr>
           ${subs.map(x => `<tr><td>${esc(x.lesson_date)}</td><td class="left">${esc(x.group_name || x.group_id)}<br><span class="mut">${esc(x.group_id)}</span></td>
-            <td class="left">${esc([x.branch, x.level].filter(Boolean).join(' · ') || '—')}</td><td class="left">${esc(x.replaces || '—')}</td><td class="left">${esc(x.full_name)}</td>
+            <td class="left">${esc([x.branch, x.level].filter(Boolean).join(' · ') || '—')}</td><td class="left">${esc(x.replaces || '—')}${x.time ? `<br><span class="mut">${esc(x.time)}</span>` : ''}</td><td class="left">${esc(x.full_name)}</td>
             <td class="act"><button class="btn ghost sm" data-rm-sub="${x.id}">Убрать</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Замен нет</div>'}</div>`;
     loadGroups();
   };
@@ -247,25 +251,34 @@
     const select = $('#s-group'); if (!select) return;
     const f = state.subsF, chosen = select.value;
     const list = subGroups.filter(g => (!f.city || g.city === f.city) && (!f.level || g.level === f.level));
-    select.innerHTML = list.length
-      ? list.map(g => `<option value="${esc(g.id)}">${esc([g.name, g.branch, g.level, g.time].filter(Boolean).join(' · '))}${g.teacher ? ` — ${esc(g.teacher)}` : ''}</option>`).join('')
+    // Строка — преподаватель группы со своим слотом: в группе с местным и иностранцем заменяют только одного из них.
+    const rows = list.flatMap(g => (g.slots?.length ? g.slots : [{ teacherId: '', teacher: g.teacher, time: g.time }])
+      .map(s => ({ value: `${g.id}|${s.teacherId}`, label: `${[g.name, g.branch, g.level, s.time].filter(Boolean).join(' · ')}${s.teacher ? ` — ${s.teacher}` : ''}` })));
+    select.innerHTML = rows.length
+      ? rows.map(r => `<option value="${esc(r.value)}">${esc(r.label)}</option>`).join('')
       : `<option value="">${subGroups.length ? 'нет групп по фильтру' : 'в этот день занятий нет'}</option>`;
-    if (list.some(g => g.id === chosen)) select.value = chosen;
+    if (rows.some(r => r.value === chosen)) select.value = chosen;
     loadBusy();
   }
-  /** Под списком: кого заменяют в выбранной группе. */
+  /** Выбранная строка: группа и HollyHop ID заменяемого преподавателя. */
+  const chosenSlot = () => {
+    const [group = '', teacher = ''] = ($('#s-group')?.value || '').split('|');
+    const g = subGroups.find(x => x.id === group);
+    return { group, teacher, g, slot: g?.slots?.find(s => s.teacherId === teacher) || null };
+  };
+  /** Под списком: кого заменяют и в какое время. */
   function paintMain() {
-    const box = $('#s-main'), g = subGroups.find(x => x.id === $('#s-group')?.value);
-    if (box) box.textContent = g ? `Заменяют: ${g.teacher || 'преподаватель не указан в HollyHop'}` : '';
+    const box = $('#s-main'), { g, slot } = chosenSlot();
+    if (box) box.textContent = g ? `Заменяют: ${(slot?.teacher || g.teacher) || 'преподаватель не указан в HollyHop'}${slot?.time ? `, ${slot.time}` : ''}` : '';
   }
   /** Занятость преподавателей на время выбранной группы: занятые помечены красным в списке. */
   async function loadBusy() {
     const select = $('#s-teacher'); if (!select) return;
-    const group = $('#s-group').value, date = $('#s-date').value, chosen = select.value;
+    const { group, teacher } = chosenSlot(), date = $('#s-date').value, chosen = select.value;
     paintMain();
     busy = {};
     if (group) {
-      try { busy = await api(`/substitutions/busy?date=${date}&group=${encodeURIComponent(group)}`); }
+      try { busy = await api(`/substitutions/busy?date=${date}&group=${encodeURIComponent(group)}&teacher=${encodeURIComponent(teacher)}`); }
       catch (e) { LTC.toast('Не удалось проверить занятость: ' + e.message, 'bad'); }
     }
     select.innerHTML = subTeachers.map(t => busy[t.id]
@@ -290,7 +303,8 @@
   on(root, 'change', '#s-teacher', paintBusy);
   on(root, 'click', '[data-act="add-sub"]', async () => {
     if (busy[$('#s-teacher').value]) return paintBusy();
-    try { await api('/substitutions', { method: 'POST', body: { group_id: $('#s-group').value, lesson_date: $('#s-date').value, substitute_id: $('#s-teacher').value } }); LTC.toast('Замена назначена', 'good'); show('subs'); }
+    const { group, teacher } = chosenSlot();
+    try { await api('/substitutions', { method: 'POST', body: { group_id: group, lesson_date: $('#s-date').value, substitute_id: $('#s-teacher').value, replaced_hh_id: teacher || null } }); LTC.toast('Замена назначена', 'good'); show('subs'); }
     catch (e) { LTC.toast(e.message, 'bad'); }
   });
   on(root, 'click', '[data-rm-sub]', async el => { await api('/substitutions/' + el.dataset.rmSub, { method: 'DELETE' }); show('subs'); });

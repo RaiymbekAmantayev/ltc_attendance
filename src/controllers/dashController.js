@@ -30,12 +30,13 @@ exports.staff = async (req, res) => res.json((await Teacher.findActive())
 exports.substitutions = async (req, res) => res.json(await substitutionService.recent());
 
 exports.addSubstitution = async (req, res) => {
-  const { group_id, lesson_date, substitute_id } = req.body || {};
+  const { group_id, lesson_date, substitute_id, replaced_hh_id = null } = req.body || {};   // replaced_hh_id — кого заменяют
   if (!group_id || !lessons.isDate(lesson_date) || !substitute_id) throw new AppError(400, 'bad_request');
   const substitute = await Teacher.findById(substitute_id);
   if (!substitute || !substitute.active) throw new AppError(400, 'bad_teacher');
-  await Substitution.create({ group_id, lesson_date, substitute_id });
-  await Audit.log(substitute.id, 'substitution_add', group_id, lesson_date, {}, `tg:${req.teacher.telegram_id}`);
+  if (await Substitution.slotTaken(group_id, lesson_date, replaced_hh_id)) throw new AppError(409, 'already_substituted');
+  await Substitution.create({ group_id, lesson_date, substitute_id, replaced_hh_id });
+  await Audit.log(substitute.id, 'substitution_add', group_id, lesson_date, { replaced_hh_id }, `tg:${req.teacher.telegram_id}`);
   res.json({ ok: 1 });
 };
 

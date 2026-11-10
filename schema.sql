@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS teachers(
 CREATE TABLE IF NOT EXISTS substitutions(         -- вариант B: замена на дату
   id INT AUTO_INCREMENT PRIMARY KEY,
   group_id VARCHAR(64) NOT NULL, lesson_date DATE NOT NULL, substitute_id INT NOT NULL,
+  replaced_hh_id VARCHAR(64) NULL,                -- кого заменяют (HollyHop ID); NULL — вся группа
   UNIQUE(group_id,lesson_date,substitute_id),
   FOREIGN KEY(substitute_id) REFERENCES teachers(id)
 );

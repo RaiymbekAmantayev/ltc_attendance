@@ -1,7 +1,7 @@
 const hollihop = require('./hollihopService');
 const Substitution = require('../models/substitutionModel');
 const Submission = require('../models/submissionModel');
-const { withMainTeacher } = require('./substitutionService');
+const { withMainTeacher, slotOf, replacedName } = require('./substitutionService');
 const { isDate, todayIso } = require('../lib/date');
 
 exports.isDate = isDate;
@@ -9,11 +9,19 @@ exports.todayIso = todayIso;
 
 /** Свои группы преподавателя + группы, где он назначен на замену в эту дату. */
 async function groupsForTeacher(teacher, date) {
-  const own = teacher.hollihop_id ? await hollihop.teacherGroups(teacher.hollihop_id, date) : [];
-  const ownIds = new Set(own.map(g => g.id));
-  const substituteIds = teacher.id ? await Substitution.groupIdsForTeacher(teacher.id, date) : [];
-  const substitutes = (await withMainTeacher((await Promise.all(substituteIds.filter(id => !ownIds.has(String(id))).map(hollihop.groupById)))
-    .filter(Boolean))).map(g => ({ ...g, substitution: true, replaces: g.teacher || null }));   // replaces — кого заменяет
+  const scheduled = teacher.hollihop_id ? await hollihop.teacherGroups(teacher.hollihop_id, date) : [];
+  const ownIds = new Set(scheduled.map(g => g.id));
+  // Урок, на который назначена замена, у заменяемого скрыт — отмечает заменяющий. Уже отмеченный им самим остаётся.
+  const replaced = scheduled.length ? await Substitution.replacedGroupIds(teacher.hollihop_id, date) : [];
+  const keep = await Promise.all(scheduled.map(async g => !replaced.includes(g.id) || !!(await Submission.findByGroupAndDate(g.id, date, teacher.id))));
+  const own = scheduled.filter((_, i) => keep[i]);
+  const subs = (teacher.id ? await Substitution.forTeacher(teacher.id, date) : []).filter(s => !ownIds.has(String(s.group_id)));
+  const groups = await withMainTeacher((await Promise.all(subs.map(s => hollihop.groupById(s.group_id, date)))).filter(Boolean));
+  // Время — слот заменяемого преподавателя (в группе с местным и иностранцем у каждого своё); replaces — кого заменяет.
+  const substitutes = groups.map(g => {
+    const s = subs.find(x => String(x.group_id) === g.id), slot = slotOf(g, s.replaced_hh_id);
+    return { ...g, time: slot?.time || g.time, substitution: true, replaces: replacedName(g, s) || null };
+  });
   return [...own, ...substitutes];
 }
 

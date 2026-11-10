@@ -96,6 +96,8 @@
 
   /* ---------- Группы ---------- */
   let groupsCache = [];
+  /** Слоты группы, на которые ещё нет замены: уже заменённый не предлагаем, пока замену не уберут. */
+  const freeSlots = g => (g?.slots || []).filter(s => !s.substitute);
 
   const groupCard = g => {
     const t = T();
@@ -200,6 +202,7 @@
           <input type="date" id="s-date" class="grow" value="${state.groupsDate}">
           <select id="s-teacher" class="grow">${staff.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
         </div>
+        ${freeSlots(g).length > 1 ? `<select id="s-slot" class="block" style="margin-top:8px">${freeSlots(g).map(s => `<option value="${esc(s.teacherId)}">${esc(A.fmt(t.replacesFor, { name: s.teacher }))}${s.time ? ` · ${esc(s.time)}` : ''}</option>`).join('')}</select>` : ''}
         <button class="btn block" style="margin-top:10px" data-act="assign" data-gid="${esc(gid)}">${esc(t.assign)}</button>`;
     } catch (e) { body.innerHTML = A.errorBox(e); }
   });
@@ -207,7 +210,11 @@
     const el = event.target.closest('[data-act="assign"]');
     if (!el) return;
     try {
-      await A.api('/dash/substitutions', { method: 'POST', body: { group_id: el.dataset.gid, lesson_date: $('#s-date').value, substitute_id: Number($('#s-teacher').value) } });
+      // кого заменяют: выбранный слот; в группе с одним преподавателем — он сам
+      const g = groupsCache.find(x => x.id === el.dataset.gid);
+      if (g?.slots?.length && !freeSlots(g).length) return LTC.toast(T().errors.already_substituted, 'bad');   // все слоты уже заменены
+      const replaced = $('#s-slot')?.value || freeSlots(g)[0]?.teacherId || null;
+      await A.api('/dash/substitutions', { method: 'POST', body: { group_id: el.dataset.gid, lesson_date: $('#s-date').value, substitute_id: Number($('#s-teacher').value), replaced_hh_id: replaced } });
       LTC.toast(T().subAdded, 'good'); LTC.modal.close();
       if (state.tab === 'groups') rerender();
     } catch (e) { LTC.toast(A.errText(e), 'bad'); }

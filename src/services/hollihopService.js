@@ -122,24 +122,47 @@ function toGroup(edUnit, date, teacherId) {
   rememberOffice(edUnit.OfficeOrCompanyName, edUnit.OfficeOrCompanyId);
   const officeId = edUnit.OfficeOrCompanyId ?? officeIds.get(String(edUnit.OfficeOrCompanyName || '').trim());
   const all = edUnit.ScheduleItems || [];
-  const items = all.filter(item => (!date || item.Weekdays & weekdayBit(date)) && hasTeacher(item, teacherId));
+  // Строки дня по времени: у группы бывает несколько слотов с разными преподавателями (09:30 — один, 10:20 — другой).
+  const items = all.filter(item => (!date || item.Weekdays & weekdayBit(date)) && hasTeacher(item, teacherId))
+    .sort((a, b) => hhmm(a.BeginTime).localeCompare(hhmm(b.BeginTime)));
   const first = items[0] || all[0] || {};
+  const last = items.length ? items.reduce((a, b) => (hhmm(b.EndTime) > hhmm(a.EndTime) ? b : a)) : first;
+  const teachers = [...new Set((items.length ? items : [first]).map(i => i.Teacher || i.TeacherName).filter(Boolean))];
   const students = edUnit.StudentsCount ?? null;
   return {
     id: String(edUnit.Id),
     name: edUnit.Name,
     branch: edUnit.OfficeOrCompanyName || '',
     city: (edUnit.OfficeOrCompanyName || officeId != null) ? cities.of(officeId) : '',
-    time: first.BeginTime ? `${first.BeginTime}–${first.EndTime}` : '',
+    time: first.BeginTime ? `${first.BeginTime}–${last.EndTime || first.EndTime}` : '',
     days: daysLabel(items.length ? items : all),
     students,
     vacancies: edUnit.Vacancies ?? null,
     level: edUnit.Level || '',
     discipline: edUnit.Discipline || '',
-    teacher: first.Teacher || first.TeacherName || '',
+    teacher: teachers.join(', '),
     teacherId: first.TeacherIds?.[0] != null ? String(first.TeacherIds[0]) : null,
+    slots: teacherSlots(items),
     hasLessonOnDate: items.length > 0,
   };
+}
+
+const hhmm = t => String(t || '99:99').padStart(5, '0');   // «9:30» → «09:30» для сравнения строк
+
+/** Слоты преподавателей в группе: [{teacherId, teacher, time}] по времени — кого из них можно заменить отдельно. */
+function teacherSlots(items) {
+  const byTeacher = new Map();
+  for (const item of items) {
+    const id = item.TeacherIds?.[0] != null ? String(item.TeacherIds[0]) : null;
+    if (!id) continue;
+    const slot = byTeacher.get(id);
+    if (!slot) byTeacher.set(id, { teacherId: id, teacher: item.Teacher || item.TeacherName || '', from: item.BeginTime, to: item.EndTime });
+    else {
+      if (hhmm(item.BeginTime) < hhmm(slot.from)) slot.from = item.BeginTime;
+      if (hhmm(item.EndTime) > hhmm(slot.to)) slot.to = item.EndTime;
+    }
+  }
+  return [...byTeacher.values()].map(({ from, to, ...s }) => ({ ...s, time: from ? `${from}–${to}` : '' }));
 }
 
 const GROUP_TYPES = 'Group,MiniGroup,Individual';
@@ -235,9 +258,12 @@ function lessonsFromEdUnits(edUnits, from, to) {
 }
 exports._lessonsFromEdUnits = lessonsFromEdUnits;
 
-exports.groupById = id => cached(`gi:${id}`, async () => {
+/** Группа по Id; с датой — время и слоты преподавателей именно этого дня. */
+exports.groupById = (id, date) => cached(`gi:${id}:${date || ''}`, async () => {
   const { EdUnits = [] } = await call('GetEdUnits', { id });
-  return EdUnits[0] ? toGroup(EdUnits[0]) : null;
+  if (!EdUnits[0]) return null;
+  const onDate = date && toGroup(EdUnits[0], date);
+  return onDate?.hasLessonOnDate ? onDate : toGroup(EdUnits[0]);
 });
 
 /** Актуальный ученик: связка началась (BeginDate есть), а EndDate нет или она ещё не прошла. */

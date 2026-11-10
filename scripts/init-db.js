@@ -12,6 +12,7 @@ const COLUMNS = [
   ['submissions', 'branch', 'ADD COLUMN branch VARCHAR(100) NULL AFTER group_name'],
   ['submissions', 'attempts', 'ADD COLUMN attempts INT NOT NULL DEFAULT 0 AFTER last_error'],
   ['submissions', 'slot', 'ADD COLUMN slot TINYINT NOT NULL DEFAULT 1 AFTER attempts'],
+  ['substitutions', 'replaced_hh_id', 'ADD COLUMN replaced_hh_id VARCHAR(64) NULL AFTER substitute_id'],
   ['audit_log', 'actor', 'ADD COLUMN actor VARCHAR(100) NULL AFTER teacher_id'],
 ];
 

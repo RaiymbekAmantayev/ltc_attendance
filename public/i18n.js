@@ -43,7 +43,7 @@ needTest: 'Введите баллы теста: {name}', needTestFull: 'Зап�
     // преподаватели
     teachersTitle: 'Преподаватели', done: 'Записано', problemsShort: 'Проблем', noTelegram: 'нет Telegram ID', inactive: 'неактивен',
     errors: {
-      forbidden: 'Нет доступа к этой группе', already_saved: 'Это занятие уже отмечено', lesson_full: 'На это занятие уже есть две отметки', lesson_lang_taken: 'Это занятие уже отметил другой преподаватель того же типа (местный/иностранный)',bad_request: 'Некорректные данные',
+      forbidden: 'Нет доступа к этой группе', already_saved: 'Это занятие уже отмечено', lesson_full: 'На это занятие уже есть две отметки', lesson_lang_taken: 'Это занятие уже отметил другой преподаватель того же типа (местный/иностранный)',already_substituted: 'На этот урок замена уже назначена — сначала уберите её', bad_request: 'Некорректные данные',
       unknown_student: 'Ученик не из этой группы', test_required: 'Тест обязателен', test_incomplete: 'Нужны баллы по всем навыкам теста', bad_personal_test: 'Неизвестный доп. тест', personal_empty: 'Доп. тест выбран, но баллы не введены', comment_required: 'Тема урока обязательна', homework_required: 'Домашнее задание обязательно',
       score_out_of_range: 'Балл вне допустимого диапазона', bad_score: 'Балл должен быть числом', rate_limited: 'Слишком часто, подождите минуту',
       bad_init_data: 'Сессия Telegram устарела — откройте кабинет заново', server: 'Ошибка сервера',
@@ -86,7 +86,7 @@ needTest: 'Enter test scores: {name}', needTestFull: 'Enter scores for all skill
     csv: 'Download CSV', exportGroups: 'Groups export', exportTeachers: 'Teachers export',
     teachersTitle: 'Teachers', done: 'Written', problemsShort: 'Issues', noTelegram: 'no Telegram ID', inactive: 'inactive',
     errors: {
-      forbidden: 'No access to this group', already_saved: 'This lesson is already marked', lesson_full: 'This lesson already has two submissions', lesson_lang_taken: 'This lesson is already marked by another teacher of the same type (local/foreign)',bad_request: 'Invalid data',
+      forbidden: 'No access to this group', already_saved: 'This lesson is already marked', lesson_full: 'This lesson already has two submissions', lesson_lang_taken: 'This lesson is already marked by another teacher of the same type (local/foreign)',already_substituted: 'A cover is already assigned to this lesson — remove it first', bad_request: 'Invalid data',
       unknown_student: 'Student is not in this group', test_required: 'Test is required', test_incomplete: 'Scores for all test skills are required', bad_personal_test: 'Unknown extra test', personal_empty: 'Extra test selected but no scores entered', comment_required: 'Lesson topic is required', homework_required: 'Homework is required',
       score_out_of_range: 'Score is out of range', bad_score: 'Score must be a number', rate_limited: 'Too many requests, wait a minute',
       bad_init_data: 'Telegram session expired — reopen the cabinet', server: 'Server error',

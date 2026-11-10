@@ -187,7 +187,8 @@ test('замена на дату открывает группу заменяю�
   const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
   assert.equal(lessons.find(g => g.id === '9002' && g.substitution).replaces, 'Смит John', 'заменяющий видит, кого заменяет');
   const groups = (await api.request('GET', `/admin-api/groups?date=${h.WED}`, { admin: true })).json;
-  assert.deepEqual(groups.find(g => g.id === '9001'), { id: '9001', name: 'English Elementary A1', branch: 'Абая', city: 'Алматы', time: '10:00–11:30', level: 'Elementary', teacher: 'Иванова Анна' });
+  assert.deepEqual(groups.find(g => g.id === '9001'), { id: '9001', name: 'English Elementary A1', branch: 'Абая', city: 'Алматы', time: '10:00–11:30', level: 'Elementary', teacher: 'Иванова Анна',
+    slots: [{ teacherId: '101', teacher: 'Иванова Анна', time: '10:00–11:30' }] });
   const list = (await api.request('GET', `/api/groups/9002/students?date=${h.WED}`, { tg: TG.teacher })).json.students.map(s => ({ id: s.id, status: 'present', skills: DAILY }));
   const saved = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9002', list) });
   assert.equal(saved.json.status, 'done');
@@ -226,4 +227,50 @@ test('замена в админке: занятого в это время пр
   // уже назначенная замена занимает время в других группах: Kids Starter тоже 09:00–10:00
   assert.deepEqual(Object.keys(await busy('9005')).map(Number).sort(), [t1, t2, t3].sort());
   assert.deepEqual(Object.keys(await busy('31')).map(Number).sort(), [t1, t3].sort(), 'своя замена в этой же группе — не занятость');
+});
+
+test('группа с двумя преподавателями: замена только на слот заменяемого', async () => {
+  // как 1317 в HollyHop: по Пн/Ср 10:20–11:05 — иностранец (первой строкой), 09:30–10:15 — местный
+  const unit = { Id: 9006, Name: 'Co-teach Elementary', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 5, Vacancies: 5, Level: 'Elementary', Discipline: 'English',
+    ScheduleItems: [
+      { Weekdays: 21, BeginTime: '10:20', EndTime: '11:05', TeacherIds: [102], Teacher: 'Смит John' },
+      { Weekdays: 21, BeginTime: '09:30', EndTime: '10:15', TeacherIds: [101], Teacher: 'Иванова Анна' },
+    ] };
+  h.mock.EDUNITS.push(unit);
+  try {
+    const groups = (await api.request('GET', `/admin-api/groups?date=${h.WED}`, { admin: true })).json;
+    assert.deepEqual(groups.find(g => g.id === '9006').slots, [
+      { teacherId: '101', teacher: 'Иванова Анна', time: '09:30–10:15' },
+      { teacherId: '102', teacher: 'Смит John', time: '10:20–11:05' },
+    ], 'у каждого преподавателя своё время, по порядку');
+
+    const busy = async teacher => (await api.request('GET', `/admin-api/substitutions/busy?date=${h.WED}&group=9006&teacher=${teacher}`, { admin: true })).json;
+    // слот местного 09:30–10:15: иностранец того же урока (10:20) свободен, Сатпаева (Kids Starter 09:00–10:00) занята
+    const local = await busy('101');
+    assert.ok(!local[t2], 'второй преподаватель группы в это время свободен');
+    assert.ok(local[t3]);
+    // слот иностранца 10:20–11:05: Сатпаева свободна, Иванова занята своей 9001 (10:00–11:30)
+    const foreign = await busy('102');
+    assert.ok(!foreign[t3]);
+    assert.ok(foreign[t1]);
+
+    const add = await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9006', lesson_date: h.WED, substitute_id: t3, replaced_hh_id: '102' } });
+    assert.equal(add.status, 200, JSON.stringify(add.json));
+    const lesson = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.third })).json.find(g => g.id === '9006');
+    assert.equal(lesson.time, '10:20–11:05', 'заменяющий видит время слота, а не всего занятия');
+    assert.equal(lesson.replaces, 'Смит John');
+
+    // заменённый слот больше не предлагается и второй раз не назначается, пока замену не уберут
+    const after = (await api.request('GET', `/admin-api/groups?date=${h.WED}`, { admin: true })).json.find(g => g.id === '9006');
+    assert.deepEqual(after.slots.map(s => s.teacherId), ['101']);
+    const again = await api.request('POST', '/admin-api/substitutions', { admin: true, body: { group_id: '9006', lesson_date: h.WED, substitute_id: t1, replaced_hh_id: '102' } });
+    assert.equal(again.status, 409);
+
+    // у заменяемого урок скрыт, у второго преподавателя группы — остаётся
+    const lessonsOf = async tg => (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg })).json.map(g => g.id);
+    assert.ok(!(await lessonsOf(TG.other)).includes('9006'), 'заменяемый не видит урок');
+    assert.ok((await lessonsOf(TG.teacher)).includes('9006'));
+  } finally {
+    h.mock.EDUNITS.splice(h.mock.EDUNITS.indexOf(unit), 1);
+  }
 });

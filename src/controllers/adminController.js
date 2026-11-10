@@ -64,25 +64,31 @@ exports.importTeachers = async (req, res) => {
 // ── Замены ──
 exports.listGroups = async (req, res) => {
   const date = lessons.isDate(req.query.date) ? req.query.date : lessons.todayIso();
-  const groups = await substitutionService.withMainTeacher(await hollihop.groupsOnDate(date));
-  res.json(groups.map(({ id, name, branch, city, time, level, teacher }) => ({ id, name, branch, city, time, level, teacher })));
+  const [all, subs] = await Promise.all([hollihop.groupsOnDate(date).then(substitutionService.withMainTeacher), Substitution.forDate(date)]);
+  // slots — преподаватели группы в этот день со своим временем: замену назначают на одного из них.
+  // Уже заменённый слот не предлагаем, пока замену не уберут; группа, где заменены все, пропадает из списка.
+  const taken = new Set(subs.filter(s => s.replaced_hh_id).map(s => `${s.group_id}|${s.replaced_hh_id}`));
+  const groups = all.map(g => ({ ...g, slots: (g.slots || []).filter(s => !taken.has(`${g.id}|${s.teacherId}`)) }))
+    .filter((g, i) => g.slots.length || !all[i].slots?.length);
+  res.json(groups.map(({ id, name, branch, city, time, level, teacher, slots }) => ({ id, name, branch, city, time, level, teacher, slots })));
 };
 exports.listSubstitutions = async (req, res) => res.json(await substitutionService.recent());
 
-/** Кто занят во время занятия группы: { teacherId: [{groupId, group, time}] }. */
+/** Кто занят во время замены (teacher — HollyHop ID заменяемого; без него — всё занятие группы): { teacherId: [{groupId, group, time}] }. */
 exports.busyTeachers = async (req, res) => {
-  const { date, group } = req.query;
+  const { date, group, teacher } = req.query;
   if (!group || !lessons.isDate(date)) throw new AppError(400, 'Укажите группу и дату');
-  res.json(await substitutionService.busyTeachers(group, date));
+  res.json(await substitutionService.busyTeachers(group, date, teacher || null));
 };
 
 exports.addSubstitution = async (req, res) => {
-  const { group_id, lesson_date, substitute_id } = req.body || {};
+  const { group_id, lesson_date, substitute_id, replaced_hh_id = null } = req.body || {};
   if (!group_id || !lessons.isDate(lesson_date) || !substitute_id) throw new AppError(400, 'Заполните группу, дату и преподавателя');
-  const busy = (await substitutionService.busyTeachers(group_id, lesson_date))[Number(substitute_id)];
+  if (await Substitution.slotTaken(group_id, lesson_date, replaced_hh_id)) throw new AppError(409, 'На этот урок замена уже назначена — сначала уберите её');
+  const busy = (await substitutionService.busyTeachers(group_id, lesson_date, replaced_hh_id))[Number(substitute_id)];
   if (busy) throw new AppError(409, `Нельзя назначить: преподаватель ${substitutionService.busyText(busy)}`);
-  await Substitution.create({ group_id, lesson_date, substitute_id });
-  await Audit.log(substitute_id, 'substitution_add', group_id, lesson_date, {}, ACTOR);
+  await Substitution.create({ group_id, lesson_date, substitute_id, replaced_hh_id });
+  await Audit.log(substitute_id, 'substitution_add', group_id, lesson_date, { replaced_hh_id }, ACTOR);
   res.json({ ok: 1 });
 };
 
