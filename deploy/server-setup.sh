@@ -84,6 +84,7 @@ HH_DOMAIN=CHANGE_ME
 HH_AUTHKEY=CHANGE_ME
 ADMIN_USER=admin
 ADMIN_PASS=$(openssl rand -hex 12)
+INTEGRATION_KEY=$(openssl rand -hex 24)
 DIRECTOR_TG_IDS=
 ENV
   )

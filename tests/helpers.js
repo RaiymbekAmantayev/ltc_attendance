@@ -5,7 +5,7 @@ const { execFileSync } = require('child_process');
 
 const DB_URL = process.env.TEST_DATABASE_URL || 'mysql://root:@127.0.0.1:3306/ltc_test';
 Object.assign(process.env, {
-  BOT_TOKEN: '123456:TEST-TOKEN', DATABASE_URL: DB_URL, HH_MOCK: '1', ADMIN_USER: 'admin', ADMIN_PASS: 'secret',
+  BOT_TOKEN: '123456:TEST-TOKEN', DATABASE_URL: DB_URL, HH_MOCK: '1', ADMIN_USER: 'admin', ADMIN_PASS: 'secret', INTEGRATION_KEY: 'mentor-key',
   DIRECTOR_TG_IDS: '999', HH_RETRY_BASE_MS: '1', HH_CACHE_TTL_MS: '0', APP_TZ: 'Asia/Almaty',
   ...(global.__TEST_ENV__ || {}),
 });
@@ -22,7 +22,7 @@ exports.setupDb = async () => {
   const url = new URL(DB_URL);
   const db = await mysql.createConnection({ uri: DB_URL });
   await db.query('SET FOREIGN_KEY_CHECKS=0');
-  for (const t of ['audit_log', 'submissions', 'substitutions', 'teachers', 'ktp_topics', 'ktp_categories']) await db.query(`TRUNCATE ${t}`);
+  for (const t of ['audit_log', 'submissions', 'substitutions', 'teachers', 'ktp_topics', 'ktp_categories', 'absence_feedback']) await db.query(`TRUNCATE ${t}`);
   await db.query('SET FOREIGN_KEY_CHECKS=1');
   exports.db = db;
   return db;

@@ -4,9 +4,11 @@
 // В посещаемости — только ученики, которые сейчас учатся в группе (GetEdUnitStudents: BeginDate есть, EndDate нет или не прошла),
 // и по ученику одна строка: уроки всех его текущих групп вместе.
 const Submission = require('../models/submissionModel');
+const AbsenceFeedback = require('../models/absenceFeedbackModel');
 const personalTests = require('../config/personalTests');
 const testing = require('../config/testing');
 const xlsx = require('../lib/xlsx');
+const { localDayOf } = require('../lib/date');
 const hollihop = require('./hollihopService');
 const { BANDS, bandOf, lookupGroups, newFound, matcher, withCity, ruDate, PCT_STYLE } = require('./testsExportService');
 
@@ -88,7 +90,9 @@ exports.results = async (from, to, filters = {}) => {
 
 /** Строки учеников и счётчики критериев по набору уроков ученика. */
 function scope(id, name, students) {
-  const rows = [...students.values()].map(({ groups, ...r }) => ({ ...r, group: [...groups.values()].join(', '), rate: round(r.absent / r.lessons) })).sort(byStudent);
+  const rows = [...students.values()].map(({ groups, ...r }) => ({
+    ...r, group: [...groups.values()].join(', '), groups: [...groups].map(([gid, name]) => ({ id: String(gid), name })), rate: round(r.absent / r.lessons),
+  })).sort(byStudent);
   const counts = Object.fromEntries(CRITERIA.map(([key, , test]) => [key, rows.filter(r => test(r.absent, r.lessons)).length]));
   return { id, name, students: rows.length, counts, rows: rows.filter(r => r.absent) };
 }
@@ -111,12 +115,18 @@ async function loadActive(rows, active, found) {
   }
 }
 
+/** Обратная связь для ответа: дата — ISO в UTC. */
+const feedbackOf = f => (f ? {
+  status: f.status, reason: f.reason, mentor: f.mentor, period: { from: isoOf(f.period_from), to: isoOf(f.period_to) },
+  feedbackAt: String(f.feedback_at).replace(' ', 'T') + 'Z',
+} : null);
+
 /** Посещаемость: { criteria, scopes: [все, ...преподаватели] }; rows — ученики хотя бы с одним пропуском, groups — их текущие группы. */
 exports.attendance = async (from, to, filters = {}) => {
   const all = new Map(), seen = new Set(), teachers = new Map(), active = new Map();
   const add = (map, r, s, name) => {
     const key = String(s.id);
-    if (!map.has(key)) map.set(key, { student: name, groups: new Map(), lessons: 0, absent: 0 });
+    if (!map.has(key)) map.set(key, { id: key, student: name, groups: new Map(), lessons: 0, absent: 0 });
     const row = map.get(key);
     row.groups.set(r.group_id, r.group_name || r.group_id);   // группа — по id: после переименования в HollyHop — последнее название
     row.lessons++;
@@ -135,10 +145,11 @@ exports.attendance = async (from, to, filters = {}) => {
       if (!seen.has(lesson)) { seen.add(lesson); add(all, r, s, name); }
     }
   }, (rows, found) => loadActive(rows, active, found));
-  return {
-    criteria: CRITERIA.map(([key, label]) => [key, label]),
-    scopes: [scope(ALL, 'Все преподаватели', all), ...teacherList(teachers).map(t => scope(t.id, t.name, t.students))],
-  };
+  const scopes = [scope(ALL, 'Все преподаватели', all), ...teacherList(teachers).map(t => scope(t.id, t.name, t.students))];
+  // Обратная связь менторов (absence_feedback) — последняя по ученику среди периодов, пересекающихся с отчётом.
+  const feedback = await AbsenceFeedback.latestFor(from, to);
+  for (const sc of scopes) for (const r of sc.rows) r.feedback = feedbackOf(feedback.get(r.id));
+  return { criteria: CRITERIA.map(([key, label]) => [key, label]), scopes };
 };
 
 /* ---------------- Excel ---------------- */
@@ -184,10 +195,12 @@ exports.attendanceSheets = (rep, teacherId) => {
       [{ v: 'Учеников всего', s: S.total }, { v: sc.students, s: S.total }]],
   };
   const list = {
-    name: 'Пропуски учеников', freeze: { rows: 1, cols: 2 }, widths: [5, 34, 24, 10, 11, 12],
-    rows: [['№', 'ФИО ученика', 'Группы', 'Уроков', 'Пропусков', '% пропусков'].map(head),
+    name: 'Пропуски учеников', freeze: { rows: 1, cols: 2 }, widths: [5, 34, 24, 10, 11, 12, 16, 40, 14],
+    rows: [['№', 'ФИО ученика', 'Группы', 'Уроков', 'Пропусков', '% пропусков', 'Статус', 'Причина', 'Дата ОС'].map(head),
       ...sc.rows.map((r, i) => [num(i + 1), { v: r.student, s: S.cell }, { v: r.group, s: S.cell }, num(r.lessons), num(r.absent),
-        { v: r.rate, s: r.rate >= 0.3 ? S.pctBad : r.rate >= 0.15 ? S.pctMid : S.pct }])],
+        { v: r.rate, s: r.rate >= 0.3 ? S.pctBad : r.rate >= 0.15 ? S.pctMid : S.pct },
+        { v: r.feedback?.status || '', s: S.cell }, { v: r.feedback?.reason || '', s: S.cell },
+        { v: r.feedback ? ruDate(localDayOf(r.feedback.feedbackAt.slice(0, 19).replace('T', ' '))) : '', s: S.cell }])],
   };
   return [summary, list];
 };

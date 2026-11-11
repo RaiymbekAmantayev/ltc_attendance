@@ -9,7 +9,7 @@
   const ACTION = {
     save: 'Отметка сохранена', synced: 'Записано в HollyHop', retry: 'Повтор отправки', attention: 'Нужно внимание',
     teacher_create: 'Сотрудник добавлен', teacher_update: 'Сотрудник изменён', teacher_import: 'Импорт из HollyHop',
-    substitution_add: 'Замена назначена', substitution_remove: 'Замена снята',
+    substitution_add: 'Замена назначена', substitution_remove: 'Замена снята', absence_feedback: 'Обратная связь менторов',
     ktp_category_add: 'КТП: категория добавлена', ktp_category_rename: 'КТП: категория переименована', ktp_category_remove: 'КТП: категория удалена',
     ktp_topic_add: 'КТП: тема добавлена', ktp_topic_update: 'КТП: тема изменена', ktp_topic_remove: 'КТП: тема удалена', ktp_import: 'КТП: вставка из Excel',
   };
@@ -494,9 +494,11 @@
       ${att.criteria.map(([key, label]) => `<tr><td class="left">${esc(label)}</td><td><b>${sc.counts[key]}</b></td></tr>`).join('')}
     </table></div></div>
     <div class="card"><div class="card-title">Ученики с пропусками · ${sc.rows.length}</div><div class="tscroll"><table class="exp">
-      <tr><th>№</th><th class="left">ФИО ученика</th><th class="left">Группы</th><th>Уроков</th><th>Пропусков</th><th>%</th></tr>
+      <tr><th>№</th><th class="left">ФИО ученика</th><th class="left">Группы</th><th>Уроков</th><th>Пропусков</th><th>%</th><th class="left">Статус</th><th class="left">Причина</th><th>Дата ОС</th></tr>
       ${sc.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="left">${esc(r.student)}</td><td class="left">${esc(r.group)}</td><td>${r.lessons}</td><td>${r.absent}</td>
-        <td class="${r.rate >= 0.3 ? 'sev-crit' : r.rate >= 0.15 ? 'sev-warn' : ''}">${pct(r.rate)}</td></tr>`).join('')}
+        <td class="${r.rate >= 0.3 ? 'sev-crit' : r.rate >= 0.15 ? 'sev-warn' : ''}">${pct(r.rate)}</td>
+        <td class="left">${esc(r.feedback?.status || '')}</td><td class="left">${esc(r.feedback?.reason || '')}</td>
+        <td title="${esc(r.feedback?.mentor || '')}">${r.feedback ? new Date(r.feedback.feedbackAt).toLocaleDateString('ru-RU') : ''}</td></tr>`).join('')}
     </table></div>${sc.rows.length ? '' : '<div class="empty">Пропусков за период нет</div>'}</div>`;
   }
   on(root, 'click', '[data-act="exp-go"]', () => {

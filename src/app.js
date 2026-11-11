@@ -3,6 +3,7 @@ const express = require('express');
 const compression = require('compression');
 const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
+const integrationRoutes = require('./routes/integrationRoutes');
 const { errorHandler } = require('./middleware/errorHandler');
 const { securityHeaders, rateLimit, requestLog } = require('./middleware/security');
 const { pool } = require('./config/db');
@@ -15,6 +16,7 @@ if (trustProxy) app.set('trust proxy', 1);              // за cloudflared / ng
 app.use(requestLog);
 app.use(securityHeaders);
 app.use(compression());                                  // gzip: список отметок и выгрузки — мегабайты JSON
+app.use('/integration-api', rateLimit, express.json({ limit: '2mb' }), integrationRoutes);   // сервис менторов: свой лимит тела
 app.use(express.json({ limit: '300kb' }));
 
 app.get('/healthz', async (req, res) => {

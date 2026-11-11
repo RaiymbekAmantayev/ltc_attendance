@@ -28,6 +28,7 @@ module.exports = {
   },
   auditRetentionDays: num('AUDIT_RETENTION_DAYS', 365),
   admin: { user: env.ADMIN_USER || 'admin', pass: env.ADMIN_PASS || '' },
+  integrationKey: String(env.INTEGRATION_KEY || '').trim(),           // ключ сервиса менторов (/integration-api); пусто — закрыто
   directorTelegramIds: list('DIRECTOR_TG_IDS'),
   rules: {
     testRequired: true,                                                // ежедневный тест обязателен всегда (TEST_REQUIRED больше не читается)

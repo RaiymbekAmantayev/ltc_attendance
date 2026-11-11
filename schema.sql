@@ -47,6 +47,22 @@ CREATE TABLE IF NOT EXISTS ktp_topics(           -- КТП: строки пла�
   INDEX(category_id, level, num),
   FOREIGN KEY(category_id) REFERENCES ktp_categories(id)
 );
+CREATE TABLE IF NOT EXISTS absence_feedback(    -- обратная связь сервиса менторов по ученику с пропусками за период
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id VARCHAR(64) NOT NULL,                -- HollyHop ID ученика
+  student_name VARCHAR(255) NULL,
+  group_names VARCHAR(1000) NULL,                 -- группы, как их увидел ментор в выгрузке
+  lessons INT NULL,
+  period_from DATE NOT NULL, period_to DATE NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  reason VARCHAR(1000) NULL,
+  mentor VARCHAR(255) NULL,
+  feedback_at DATETIME NOT NULL,                  -- когда ментор дал обратную связь (UTC)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_student_period(student_id, period_from, period_to),   -- повторная отправка за тот же период — обновление
+  INDEX(period_from, period_to)
+);
 CREATE TABLE IF NOT EXISTS audit_log(
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   teacher_id INT, actor VARCHAR(100) NULL,
