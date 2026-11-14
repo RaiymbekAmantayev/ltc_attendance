@@ -292,7 +292,10 @@
       const queuedItem = queue.all().find(p => p.groupId === groupId && p.date === date);
       const saved = submitted?.payload || (queuedItem && { topic: queuedItem.topic, homework: queuedItem.homework, ktpTopicId: queuedItem.ktpTopicId, personal: queuedItem.personal, students: queuedItem.students });
       state.ktp = ktp || null;
-      const readOnly = !!saved;
+      const edit = submitted?.edit || null;
+      const editing = !!submitted && edit?.status === 'approved';     // запрос одобрен — отметку можно исправить
+      state.group.editing = editing;
+      const readOnly = !!saved && !editing;
       const byId = id => saved?.students.find(s => s.id === id) || {};
       const status = queuedItem && !submitted ? 'pending' : submitted?.status;
       const note = { attention: t.attentionNote, partial: t.partialNote, pending: t.pendingNote }[status];
@@ -300,9 +303,11 @@
       view.innerHTML = `
         <h2 class="title">${esc(groupName)}</h2>
         <div class="hint">${esc(LTC.fmtDate(date, state.lang))}</div>
-        ${readOnly ? `<div class="insight ${status === 'attention' ? 'crit' : status === 'done' ? 'ok' : ''}"><div>
-            <div class="insight-title">🔒 ${esc(t.readOnly)}</div>
-            <div class="insight-body"><span class="chip ${STATUS_CHIP[status] || ''}">${esc(t.status[status] || '')}</span> ${note ? esc(note) : ''}</div></div></div>` : ''}
+        ${saved ? `<div class="insight ${status === 'attention' ? 'crit' : status === 'done' && !editing ? 'ok' : ''}"><div>
+            <div class="insight-title">${editing ? '✏️ ' + esc(t.editOpen) : '🔒 ' + esc(t.readOnly)}</div>
+            <div class="insight-body"><span class="chip ${STATUS_CHIP[status] || ''}">${esc(t.status[status] || '')}</span>
+              ${submitted?.revision ? `<span class="chip">${esc(fmt(t.edited, { n: submitted.revision }))}</span>` : ''} ${note ? esc(note) : ''}</div></div></div>
+          ${submitted ? editBlock(edit) : ''}` : ''}
         <fieldset class="${readOnly ? 'lock' : ''}" ${readOnly ? 'disabled' : ''}>
           ${ktpBlock(saved)}
           <input type="text" id="topic" class="field" placeholder="${esc(t.topic)}" maxlength="500" value="${esc(saved?.topic || '')}">
@@ -310,10 +315,40 @@
           ${personalBlock(saved)}
           ${students.map(s => studentCard(s, byId(s.id), readOnly)).join('')}
         </fieldset>
-        ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(t.save)}</button></div>`}`;
+        ${readOnly ? '' : `<div class="savebar"><button class="btn block" id="save">${esc(editing ? t.saveEdit : t.save)}</button></div>`}`;
       $$('.scard').forEach(card => paintPersonal(card, byId(card.dataset.student).personalSkills));
       paintKtpInfo();
     } catch (e) { view.innerHTML = errorBox(e); }
+  }
+
+  /** Запрос на исправление своей отметки: состояние и кнопка. Решение принимает учебный отдел в админке. */
+  const stamp = v => String(v || '').replace('T', ' ').slice(0, 16);
+  function editBlock(edit) {
+    const t = T(), st = edit?.status;
+    if (st === 'approved') return `<div class="callout">${esc(fmt(t.editUntil, { until: stamp(edit.expiresAt) }))}${edit.note ? `<br>${esc(t.editNote)}: ${esc(edit.note)}` : ''}</div>`;
+    if (st === 'pending') return `<div class="callout">⏳ ${esc(t.editPending)}<br><span class="mut">${esc(edit.reason)}</span></div>`;
+    const last = st === 'rejected' ? `<div class="callout">❌ ${esc(t.editRejected)}${edit.note ? `: ${esc(edit.note)}` : ''}</div>`
+      : st === 'expired' ? `<div class="callout">${esc(t.editExpired)}</div>` : '';
+    return `${last}<button class="btn ghost block" data-act="edit-request">✏️ ${esc(t.editRequest)}</button>`;
+  }
+
+  function requestEdit() {
+    const t = T(), g = state.group;
+    const body = LTC.modal.open(t.editRequest, `
+      <p class="hint">${esc(t.editRequestHint)}</p>
+      <textarea id="edit-reason" class="field" rows="4" maxlength="1000" placeholder="${esc(t.editReason)}"></textarea>
+      <div class="row"><button class="btn ghost grow" data-modal-close>${esc(t.cancel)}</button><button class="btn grow" id="edit-send">${esc(t.editSend)}</button></div>`);
+    $('#edit-send', body).onclick = async () => {
+      const reason = $('#edit-reason', body).value.trim();
+      if (reason.length < 5) { LTC.toast(t.errors.reason_required, 'bad'); return; }
+      $('#edit-send', body).disabled = true;
+      try {
+        await api('/lessons/edit-request', { method: 'POST', body: { groupId: g.id, date: state.date, reason } });
+        LTC.modal.close();
+        LTC.toast(t.editSent, 'good');
+        openGroup(g.id, g.name);
+      } catch (e) { $('#edit-send', body).disabled = false; LTC.toast(errText(e), 'bad'); }
+    };
   }
 
   function closeGroup() { if (tg) tg.BackButton.hide(); go('lessons'); }
@@ -378,6 +413,7 @@
       result.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    if (state.group.editing) return confirmEdit(result);
     const body = LTC.modal.open(t.confirmTitle, `
       ${result.personal ? `<p>${esc(t.personalTest)}: <b>${esc(result.personalName)}</b> · ${result.students.filter(x => x.personalSkills).length} ${esc(t.students)}</p>` : ''}
       <div class="callout">${esc(t.confirmText)}</div>
@@ -395,6 +431,30 @@
       LTC.toast(left ? T().queuedToast : T().saved, left ? '' : 'good');
       if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred(left ? 'warning' : 'success'); } catch { /* */ }
       closeGroup();
+    };
+  }
+
+  /** Исправление по одобренному запросу: сразу на сервер, без оффлайн-очереди (одобрение одноразовое). */
+  function confirmEdit(result) {
+    const t = T(), g = state.group;
+    const body = LTC.modal.open(t.confirmEditTitle, `
+      <p>${esc(t.personalTest)}: ${result.personal ? `<b>${esc(result.personalName)}</b> · ${result.students.filter(x => x.personalSkills).length} ${esc(t.students)}` : esc(t.personalNone)}</p>
+      <div class="callout">${esc(t.confirmEditText)}</div>
+      <div class="row"><button class="btn ghost grow" data-modal-close>${esc(t.cancel)}</button><button class="btn grow" id="confirm">${esc(t.confirmYes)}</button></div>`);
+    const editKey = uuid();                                    // повтор того же нажатия после сбоя сети безопасен
+    $('#confirm', body).onclick = async () => {
+      $('#confirm', body).disabled = true;
+      try {
+        await api('/lessons/edit', { method: 'POST', body: {
+          editKey, groupId: g.id, date: state.date, topic: $('#topic').value.trim(), homework: $('#homework').value.trim(),
+          ktpTopicId: Number($('#ktp')?.value) || null, personal: result.personal, students: result.students.map(({ name, ...s }) => s),
+        } });
+        LTC.modal.close();
+        session.del(`roster:${g.id}:${state.date}`);
+        LTC.toast(t.editSaved, 'good');
+        if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch { /* */ }
+        closeGroup();
+      } catch (e) { $('#confirm', body).disabled = false; LTC.toast(errText(e), 'bad'); }
     };
   }
 
@@ -421,9 +481,9 @@
       </div>
       <div class="card"><div class="card-title">${esc(t.recent)}</div>
         ${p.recent.length ? `<div class="tscroll"><table><tr><th>${esc(t.subDate)}</th><th class="left">${esc(t.groupsTitle)}</th><th></th></tr>
-          ${p.recent.map(r => `<tr><td>${esc(LTC.short(r.date))}</td><td class="left">${esc(r.group)}<br><span class="mut">${r.onTime ? esc(t.onTimeYes) : esc(t.onTimeNo)} · ${r.students} ${esc(t.students)}</span></td>
-            <td><span class="chip ${STATUS_CHIP[r.status] || ''}">${esc(t.status[r.status])}</span></td></tr>`).join('')}</table></div>`
-          : `<div class="empty">${esc(t.noRecent)}</div>`}
+          ${p.recent.map(r => `<tr class="clickable" data-open-group="${esc(r.groupId)}" data-date="${esc(r.date)}" data-name="${esc(r.group)}"><td>${esc(LTC.short(r.date))}</td><td class="left">${esc(r.group)}<br><span class="mut">${r.onTime ? esc(t.onTimeYes) : esc(t.onTimeNo)} · ${r.students} ${esc(t.students)}</span></td>
+            <td><span class="chip ${STATUS_CHIP[r.status] || ''}">${esc(t.status[r.status])}</span></td></tr>`).join('')}</table></div>
+          <p class="hint">${esc(t.recentHint)}</p>` : `<div class="empty">${esc(t.noRecent)}</div>`}
       </div>`;
   };
 
@@ -464,6 +524,13 @@
   });
   on(root, 'change', '#ptype', () => $$('.scard').forEach(card => paintPersonal(card)));
   on(root, 'click', '#save', confirmSave);
+  on(root, 'click', '[data-act="edit-request"]', requestEdit);
+  // Из профиля: открыть урок (там — запрос на исправление). «Назад» вернёт к занятиям этого дня.
+  on(root, 'click', '[data-open-group]', el => {
+    state.tab = 'lessons'; state.date = el.dataset.date;
+    $$('.nav-btn').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === 'lessons')));
+    openGroup(el.dataset.openGroup, el.dataset.name);
+  });
 
   /* ============ Старт ============ */
 

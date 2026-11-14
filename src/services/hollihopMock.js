@@ -30,11 +30,11 @@ const TEST_TYPES = [131, 132];
 const FULL_SKILLS = { 1: 'listening', 2: 'reading', 3: 'grammar', 4: 'vocabulary', 5: 'pronunciation', 6: 'speaking', 7: 'writing' };
 const PERSONAL_SKILLS_BY_TYPE = { 1: { ...FULL_SKILLS, 21: 'attendance' }, 4: FULL_SKILLS };
 
-const state = { writes: [], tests: [], personal: [], failures: [], coins: {}, extraFields: {}, coinWrites: [], rosters: {} };   // coins: ClientId → «Коины»; extraFields: ClientId → прочие поля; rosters: edUnitId → строки GetEdUnitStudents (для тестов)
+const state = { writes: [], tests: [], personal: [], edits: [], results: new Map(), lastId: 1000, failures: [], coins: {}, extraFields: {}, coinWrites: [], rosters: {} };   // coins: ClientId → «Коины»; extraFields: ClientId → прочие поля; rosters: edUnitId → строки GetEdUnitStudents (для тестов)
 
 /** Для тестов: следующий вызов метода завершится ошибкой {status, body}; when(payload) — только подходящий вызов. */
 const failNext = (method, failure) => state.failures.push({ method, ...failure });
-const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.failures = []; state.coins = {}; state.extraFields = {}; state.coinWrites = []; state.rosters = {}; };
+const reset = () => { state.writes = []; state.tests = []; state.personal = []; state.edits = []; state.results = new Map(); state.lastId = 1000; state.failures = []; state.coins = {}; state.extraFields = {}; state.coinWrites = []; state.rosters = {}; };
 
 const ok = body => ({ status: 200, body });
 
@@ -124,8 +124,28 @@ async function respond(method, payload) {
         const missing = Object.keys(PERSONAL).find(id => !payload.skills.some(k => String(k.skillId) === id));
         if (missing) return { status: 500, body: { Error: `The skill "${PERSONAL[missing]}" is not specified` } };
       }
-      (SKILLS ? state.tests : state.personal).push(payload);         // ежедневный тест (131/132) — в tests, доп. тест — в personal
-      return ok({ Success: true });
+      const list = SKILLS ? state.tests : state.personal;            // ежедневный тест (131/132) — в tests, доп. тест — в personal
+      if (payload.id != null) {                                       // правка: результат с таким Id должен существовать
+        const prev = state.results.get(payload.id);
+        if (!prev) return { status: 400, body: { Error: 'Результат теста не найден' } };
+        for (const l of [state.tests, state.personal]) { const i = l.indexOf(prev); if (i >= 0) l.splice(i, 1); }
+        list.push(payload);
+        state.results.set(payload.id, payload);
+        state.edits.push(payload);
+        return ok({ Id: payload.id });
+      }
+      const Id = ++state.lastId;
+      list.push(payload);
+      state.results.set(Id, payload);                                 // запрос храним как прислан, Id — отдельно
+      return ok({ Id });
+    }
+    case 'GetPersonalTestResults': {
+      const inRange = r => (!payload.from || r.dateTime.slice(0, 16) >= payload.from) && (!payload.to || r.dateTime.slice(0, 16) <= payload.to);
+      const rows = [...state.results].map(([Id, r]) => ({ Id, ...r }))
+        .filter(r => (!payload.studentClientId || r.studentClientId === payload.studentClientId) && inRange(r))
+        .map(r => ({ Id: r.Id, DateTime: r.dateTime, StudentClientId: r.studentClientId, TeacherId: r.teacherId ?? null, TestTypeId: r.testTypeId,
+          Skills: r.skills.map(k => ({ SkillId: k.skillId, Score: k.score })), CommentHtml: r.commentHtml }));
+      return ok({ PersonalTestResults: rows });
     }
     default:
       return { status: 404, body: { Error: 'unknown method ' + method } };

@@ -1,5 +1,8 @@
 const hollihop = require('../services/hollihopService');
 const submissions = require('../services/submissionService');
+const editRequests = require('../services/editRequestService');
+const HhCleanup = require('../models/hhCleanupModel');
+const EditRequest = require('../models/editRequestModel');
 const lessons = require('../services/lessonService');
 const stats = require('../services/statsService');
 const substitutionService = require('../services/substitutionService');
@@ -140,3 +143,18 @@ exports.studentNames = async (req, res) => {
 
 exports.retrySubmission = async (req, res) => res.json(await submissions.retry(req.params.key, ACTOR));
 exports.listAudit = async (req, res) => res.json(await Audit.latest({ action: req.query.action || null }));
+
+// ── Исправления отметок: запросы преподавателей и тесты, которые надо удалить в HollyHop вручную ──
+exports.listEditRequests = async (req, res) => {
+  const [requests, cleanup, pending, cleanupPending] = await Promise.all([
+    editRequests.list({ status: req.query.status }), HhCleanup.list({ status: req.query.cleanup === 'all' ? null : 'pending' }),
+    EditRequest.countPending(), HhCleanup.countPending()]);
+  res.json({ requests: requests.map(r => ({ ...r, expired: !!Number(r.expired) })), cleanup, pending, cleanupPending, windowHours: config.editWindowHours });
+};
+exports.approveEditRequest = async (req, res) => res.json(await editRequests.decide(req.params.id, true, req.body?.note, ACTOR));
+exports.rejectEditRequest = async (req, res) => res.json(await editRequests.decide(req.params.id, false, req.body?.note, ACTOR));
+exports.cleanupDone = async (req, res) => {
+  if (!(await HhCleanup.markDone(Number(req.params.id)))) throw new AppError(409, 'Уже отмечено или не найдено');
+  await Audit.log(null, 'hh_cleanup_done', null, null, { id: Number(req.params.id) }, ACTOR);
+  res.json({ ok: 1 });
+};

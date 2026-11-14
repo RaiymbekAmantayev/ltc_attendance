@@ -34,6 +34,11 @@ router.get(API + '/student-names', c.studentNames);
 router.post(API + '/submissions/:key/retry', c.retrySubmission);
 router.get(API + '/audit', c.listAudit);
 
+router.get(API + '/edit-requests', c.listEditRequests);
+router.post(API + '/edit-requests/:id/approve', c.approveEditRequest);
+router.post(API + '/edit-requests/:id/reject', c.rejectEditRequest);
+router.post(API + '/hh-cleanup/:id/done', c.cleanupDone);
+
 router.get(API + '/ktp/levels', ktp.levels);
 router.get(API + '/ktp/categories', ktp.listCategories);
 router.post(API + '/ktp/categories', ktp.saveCategory);

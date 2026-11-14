@@ -157,7 +157,7 @@ exports.lessons = q => {
       ktp_topic_id: p.ktpTopicId ?? null,
       comment: null,                             // свободного комментария в кабинете нет (комментарий = тема урока)
       has_extra_test: !!(s.personalSkills && p.personal),
-      updated_at: stampOf(row.created_at),
+      updated_at: stampOf(row.updated_at || row.created_at),   // исправленная отметка — время исправления
     };
   });
 };
@@ -187,7 +187,7 @@ exports.tests = q => {
         const k = skillDefs.find(x => String(x.id) === id);
         return { skill_id: Number(id), name: k ? k.name : null, score: v == null ? null : Number(v), max: k ? k.max : null };
       }),
-      updated_at: stampOf(row.created_at),
+      updated_at: stampOf(row.updated_at || row.created_at),   // исправленная отметка — время исправления
     };
   });
 };

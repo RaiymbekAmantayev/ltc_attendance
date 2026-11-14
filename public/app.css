@@ -21,3 +21,5 @@ fieldset[disabled] input{opacity:.85}
 #ktp{margin-bottom:8px}
 .ktp-info{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 10px;margin-bottom:8px;font-size:12px}
 .ktp-info[hidden]{display:none}
+tr.clickable{cursor:pointer}tr.clickable:active td{opacity:.7}
+.btn.block+.btn.block,.callout+.btn.block{margin-bottom:12px}

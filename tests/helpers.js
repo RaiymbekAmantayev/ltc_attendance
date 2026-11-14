@@ -23,7 +23,7 @@ exports.setupDb = async () => {
   const url = new URL(DB_URL);
   const db = await mysql.createConnection({ uri: DB_URL });
   await db.query('SET FOREIGN_KEY_CHECKS=0');
-  for (const t of ['audit_log', 'submissions', 'substitutions', 'teachers', 'ktp_topics', 'ktp_categories', 'absence_feedback']) await db.query(`TRUNCATE ${t}`);
+  for (const t of ['audit_log', 'submissions', 'substitutions', 'teachers', 'ktp_topics', 'ktp_categories', 'absence_feedback', 'edit_requests', 'hh_cleanup']) await db.query(`TRUNCATE ${t}`);
   await db.query('SET FOREIGN_KEY_CHECKS=1');
   exports.db = db;
   return db;

@@ -43,10 +43,19 @@ exports.progressOf = row => {
   return { total, done: Math.min(progress.length, total) };
 };
 
-exports.saveProgress = (key, progress, status, error, failed) => query(
+/** results — Id результатов тестов в HollyHop по шагам, credited — начисленные коины по ученикам (null — не трогать). */
+exports.saveProgress = (key, progress, status, error, failed, results = null, credited = null) => query(
   `UPDATE submissions SET progress = ?, status = ?, last_error = ?,
-     attempts = IF(?, attempts + 1, 0) WHERE idem_key = ?`,
-  [JSON.stringify(progress), status, error ? error.slice(0, 500) : null, failed ? 1 : 0, key]);
+     attempts = IF(?, attempts + 1, 0),
+     hh_results = COALESCE(?, hh_results), coins_credited = COALESCE(?, coins_credited) WHERE idem_key = ?`,
+  [JSON.stringify(progress), status, error ? error.slice(0, 500) : null, failed ? 1 : 0,
+    results ? JSON.stringify(results) : null, credited ? JSON.stringify(credited) : null, key]);
+
+/** Исправление по одобренному запросу: новый payload, очередь записи заново (шаги тестов — правкой по Id). */
+exports.applyEdit = (key, { payload, results, credited }, conn = null) => (conn ? conn.query.bind(conn) : query)(
+  `UPDATE submissions SET payload = ?, progress = '[]', status = 'pending', last_error = NULL, attempts = 0,
+     hh_results = ?, coins_credited = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE idem_key = ?`,
+  [JSON.stringify(payload), JSON.stringify(results), JSON.stringify(credited), key]);
 
 exports.markForRetry = key => query(
   "UPDATE submissions SET status = 'partial', attempts = 0 WHERE idem_key = ? AND status IN ('attention','partial')", [key]);
@@ -91,13 +100,13 @@ exports.pageForApi = (f, fromId, limit) => {
   if (f.groupId)      { where.push('x.group_id = ?');     params.push(f.groupId); }
   if (f.teacherId)    { where.push('x.teacher_id = ?');   params.push(f.teacherId); }
   if (f.hhTeacherId)  { where.push('t.hollihop_id = ?');  params.push(f.hhTeacherId); }
-  if (f.createdSince) { where.push('x.created_at >= ?');  params.push(f.createdSince); }
+  if (f.createdSince) { where.push('(x.created_at >= ? OR x.updated_at >= ?)'); params.push(f.createdSince, f.createdSince); }
   if (f.clientId) {
     where.push("(JSON_CONTAINS(x.payload, JSON_OBJECT('id', ?), '$.students') OR JSON_CONTAINS(x.payload, JSON_OBJECT('id', ?), '$.students'))");
     params.push(String(f.clientId), Number(f.clientId));
   }
   return query(
-    `SELECT x.id, x.group_id, x.group_name, x.branch, x.lesson_date, x.teacher_id, x.payload, x.created_at,
+    `SELECT x.id, x.group_id, x.group_name, x.branch, x.lesson_date, x.teacher_id, x.payload, x.created_at, x.updated_at,
             t.full_name, t.hollihop_id, t.lang
      FROM submissions x JOIN teachers t ON t.id = x.teacher_id
      WHERE ${where.join(' AND ')} ORDER BY x.id LIMIT ?`, [...params, limit]);

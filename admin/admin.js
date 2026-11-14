@@ -3,18 +3,20 @@
   const { $, $$, on, esc } = LTC;
   const main = $('#main'), root = document.getElementById('app');
 
-  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['export', 'Выгрузка'], ['ktp', 'КТП'], ['audit', 'Аудит'], ['rules', 'Правила']];
+  const TABS = [['overview', 'Обзор'], ['teachers', 'Преподаватели'], ['subs', 'Замены'], ['subm', 'Отметки'], ['edits', 'Исправления'], ['export', 'Выгрузка'], ['ktp', 'КТП'], ['audit', 'Аудит'], ['rules', 'Правила']];
   const STATUS = { done: ['good', '✅ В HollyHop'], pending: ['warn', '⏳ Ждёт отправки'], partial: ['warn', '⚠️ Частично'], attention: ['bad', '⚠️ Нужно внимание'] };
   const ROLE = { teacher: 'Преподаватель', coordinator: 'Координатор', director: 'Директор' };
   const ACTION = {
     save: 'Отметка сохранена', synced: 'Записано в HollyHop', retry: 'Повтор отправки', attention: 'Нужно внимание',
+    edit_request: 'Запрос на исправление', edit_approved: 'Исправление одобрено', edit_rejected: 'Исправление отклонено', edit: 'Отметка исправлена',
+    hh_cleanup_done: 'Тест удалён в HollyHop',
     teacher_create: 'Сотрудник добавлен', teacher_update: 'Сотрудник изменён', teacher_import: 'Импорт из HollyHop',
     substitution_add: 'Замена назначена', substitution_remove: 'Замена снята', absence_feedback: 'Обратная связь менторов',
     ktp_category_add: 'КТП: категория добавлена', ktp_category_rename: 'КТП: категория переименована', ktp_category_remove: 'КТП: категория удалена',
     ktp_topic_add: 'КТП: тема добавлена', ktp_topic_update: 'КТП: тема изменена', ktp_topic_remove: 'КТП: тема удалена', ktp_import: 'КТП: вставка из Excel',
   };
   const chip = s => `<span class="chip ${STATUS[s]?.[0] || ''}">${esc(STATUS[s]?.[1] || s)}</span>`;
-  const state = { tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '', city: '', level: '', teacher: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
+  const state = { edits: { status: 'pending', cleanup: 'pending' }, tab: 'overview', period: null, subm: { date: '', from: '', to: '', status: '', city: '', level: '', teacher: '' }, auditAction: '', q: '', roleFilter: '', ktp: { category: '', level: '' } };
   const SKILL_NAMES = { 131: { 8: 'Was present for (min)', 11: 'Homework', 9: 'Engagement', 10: 'Discipline', 17: 'Discipline/Engagement' },
     132: { 8: 'Was present for (min)', 13: 'Домашнее задание', 9: 'Активность', 10: 'Дисциплина', 18: 'Дисциплина/Активность' } };   // 17/18 — старые отметки
   const skillName = (type, id) => (SKILL_NAMES[type] || SKILL_NAMES[132])[id] || `№${id}`;
@@ -598,6 +600,59 @@
     if (replace && !confirm('Текущие темы этой категории и уровня будут удалены. Продолжить?')) return;
     ktpCall('/ktp/topics/import', { method: 'POST', body: { category_id: Number(state.ktp.category), level: state.ktp.level, replace, rows: pasteRows($('#k-paste').value) } },
       r => `Добавлено тем: ${r.added}`);
+  });
+
+  /* ---------- Исправления: запросы преподавателей и тесты для ручного удаления в HollyHop ---------- */
+  const EDIT_STATUS = { pending: ['warn', '⏳ Ждёт решения'], approved: ['good', '✅ Одобрен'], rejected: ['bad', '❌ Отклонён'], used: ['', '✏️ Исправлено'], expired: ['', '⌛ Срок истёк'] };
+  const editChip = r => { const st = r.status === 'approved' && r.expired ? 'expired' : r.status; return `<span class="chip ${EDIT_STATUS[st]?.[0] || ''}">${esc(EDIT_STATUS[st]?.[1] || st)}</span>`; };
+  const testName = (kind, type) => (kind === 'daily' ? `Ежедневный (тип ${type ?? '?'})` : `Доп. тест (тип ${type ?? '?'})`);
+  views.edits = async () => {
+    const f = state.edits;
+    const d = await api(`/edit-requests?status=${encodeURIComponent(f.status)}&cleanup=${f.cleanup}`);
+    main.innerHTML = `
+      <div class="card"><div class="card-title">Запросы на исправление ${d.pending ? `<span class="chip warn">${d.pending} ждут</span>` : ''}</div>
+        <div class="toolbar">${filterSelect('e-status', 'Все запросы', [['pending', 'Ждут решения'], ['approved', 'Одобренные'], ['used', 'Исправленные'], ['rejected', 'Отклонённые']], f.status)}
+          <span class="mut">После одобрения у преподавателя ${d.windowHours} ч на одну правку; ему приходит сообщение в Telegram.</span></div>
+        ${d.requests.length ? `<div class="tscroll"><table><tr><th>Создан (UTC)</th><th class="left">Преподаватель</th><th class="left">Группа</th><th>Урок</th><th class="left">Причина</th><th class="left">Статус</th><th></th></tr>
+          ${d.requests.map(r => `<tr><td>${esc(r.created_at)}</td><td class="left">${esc(r.full_name || '—')}</td><td class="left">${esc(r.group_name || r.group_id)}</td><td>${esc(r.lesson_date)}</td>
+            <td class="left">${esc(r.reason)}${r.admin_note ? `<br><span class="mut">Ответ: ${esc(r.admin_note)}</span>` : ''}</td>
+            <td class="left">${editChip(r)}${r.status === 'approved' && !r.expired ? `<br><span class="mut">до ${esc(r.expires_at)}</span>` : ''}</td>
+            <td class="act">${r.status === 'pending' ? `<button class="btn sm" data-edit-decide="approve" data-id="${r.id}">Одобрить</button> <button class="btn ghost sm" data-edit-decide="reject" data-id="${r.id}">Отклонить</button>` : ''}</td></tr>`).join('')}</table></div>`
+          : '<div class="empty">Запросов нет</div>'}
+      </div>
+      <div class="card"><div class="card-title">Удалить в HollyHop вручную ${d.cleanupPending ? `<span class="chip bad">${d.cleanupPending}</span>` : ''}</div>
+        <p class="hint">В API HollyHop нет метода удаления результатов теста. Когда при исправлении тест убран (ученик стал «пропуск», доп. тест удалён или заменён другим), результат остаётся в HollyHop — удалите его там вручную и отметьте здесь.</p>
+        <div class="toolbar">${filterSelect('e-cleanup', 'Все', [['pending', 'Только не удалённые']], f.cleanup === 'pending' ? 'pending' : '')}</div>
+        ${d.cleanup.length ? `<div class="tscroll"><table><tr><th>Урок</th><th class="left">Группа</th><th class="left">Ученик</th><th class="left">Тест</th><th>Id результата</th><th>Время теста</th><th class="left">Преподаватель</th><th></th></tr>
+          ${d.cleanup.map(c => `<tr class="${c.status === 'done' ? 'off' : ''}"><td>${esc(c.lesson_date)}</td><td class="left">${esc(c.group_name || c.group_id)}</td>
+            <td class="left">${esc(c.student_name || '—')}<br><span class="mut">ClientId ${esc(c.student_id)}</span></td><td class="left">${esc(testName(c.kind, c.test_type_id))}</td>
+            <td>${c.result_id ? `<b>${esc(c.result_id)}</b>` : '<span class="mut">не найден — искать по ученику и дате</span>'}</td><td>${esc((c.date_time || '').replace('T', ' ').slice(0, 16))}</td>
+            <td class="left">${esc(c.full_name || '—')}</td>
+            <td class="act">${c.status === 'pending' ? `<button class="btn sm" data-cleanup-done="${c.id}">Удалено</button>` : `<span class="mut">${esc(c.done_at || '')}</span>`}</td></tr>`).join('')}</table></div>`
+          : '<div class="empty">✅ Удалять нечего</div>'}
+      </div>`;
+  };
+  on(root, 'change', '#e-status', el => { state.edits.status = el.value; show('edits'); });
+  on(root, 'change', '#e-cleanup', el => { state.edits.cleanup = el.value || 'all'; show('edits'); });
+  on(root, 'click', '[data-edit-decide]', el => {
+    const approve = el.dataset.editDecide === 'approve';
+    const body = LTC.modal.open(approve ? 'Одобрить исправление' : 'Отклонить запрос', `
+      <p class="hint">${approve ? 'Преподаватель сможет один раз изменить отметку: тему, ДЗ, «был/пропуск», баллы, доп. тест.' : 'Преподаватель увидит причину отказа.'}</p>
+      <textarea id="e-note" rows="3" maxlength="500" placeholder="Комментарий преподавателю (необязательно)" style="width:100%"></textarea>
+      <div class="row" style="margin-top:14px"><button class="btn grow" id="e-go">${approve ? 'Одобрить' : 'Отклонить'}</button><button class="btn ghost" data-modal-close>Отмена</button></div>`);
+    $('#e-go', body).onclick = async () => {
+      $('#e-go', body).disabled = true;
+      try {
+        await api(`/edit-requests/${el.dataset.id}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: { note: $('#e-note', body).value } });
+        LTC.modal.close(); LTC.toast(approve ? 'Исправление разрешено' : 'Запрос отклонён', 'good'); show('edits');
+      } catch (e) { $('#e-go', body).disabled = false; LTC.toast(e.message, 'bad'); }
+    };
+  });
+  on(root, 'click', '[data-cleanup-done]', async el => {
+    if (!confirm('Результат теста удалён в HollyHop?')) return;
+    el.disabled = true;
+    try { await api(`/hh-cleanup/${el.dataset.cleanupDone}/done`, { method: 'POST' }); show('edits'); }
+    catch (e) { el.disabled = false; LTC.toast(e.message, 'bad'); }
   });
 
   /* ---------- Аудит ---------- */

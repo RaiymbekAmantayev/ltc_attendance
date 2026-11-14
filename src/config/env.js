@@ -44,6 +44,7 @@ module.exports = {
     homeworkMaxLen: 500,
   },
   lowFillThreshold: num('LOW_FILL_THRESHOLD', 3),
+  editWindowHours: num('EDIT_WINDOW_HOURS', 72),                       // сколько часов после одобрения преподаватель может исправить отметку
   initDataMaxAge: num('INITDATA_MAX_AGE', 86400),
   rateLimitPerMin: num('RATE_LIMIT_PER_MIN', 120),
   trustProxy: flag('TRUST_PROXY', true),

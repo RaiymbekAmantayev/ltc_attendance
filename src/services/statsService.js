@@ -271,7 +271,7 @@ exports.profile = async teacher => {
       done: counts.done || 0, pending: counts.pending || 0, partial: counts.partial || 0, attention: counts.attention || 0,
     },
     recent: rows.slice(0, 10).map(r => ({
-      date: r.lesson_date, group: r.group_name || r.group_id, status: r.status, onTime: onTime(r),
+      date: r.lesson_date, groupId: r.group_id, group: r.group_name || r.group_id, status: r.status, onTime: onTime(r),
       students: Submission.parse(r.payload).students.length,
     })),
   };

@@ -386,9 +386,10 @@ exports.testEnabledFor = groupId => !testing.edUnitIds.length || testing.edUnitI
  * У каждого преподавателя свой результат (teacherId, время его занятия), поэтому два преподавателя одного урока не затирают друг друга.
  * Шаг идёт в общей очереди: после успеха повторно не отправляется. В commentHtml — тема урока и под ней ДЗ.
  */
-exports.writeReport = async (groupId, date, s, payload = {}) => {
+exports.writeReport = async (groupId, date, s, payload = {}, resultId = null) => {
   if (!s.skills || !payload.testTypeId || !exports.testEnabledFor(groupId)) return { local: true };
   return call('AddEditPersonalTestResult', {
+    ...(resultId != null ? { id: Number(resultId) } : {}),  // с id — правка уже записанного результата
     studentClientId: Number(s.id),
     dateTime: payload.dateTime || `${date}T00:00:00`,      // отметки, сохранённые до перевода на персональные тесты
     discipline: personalTests.discipline,
@@ -403,10 +404,11 @@ exports.writeReport = async (groupId, date, s, payload = {}) => {
  * Персональный тест ученика: AddEditPersonalTestResult (без id — добавление). Набор навыков — весь набор выбранного типа теста.
  * В commentHtml — тема урока и под ней ДЗ. Шаг идёт в общей очереди: после успеха повторно не отправляется.
  */
-exports.writePersonalTest = async (s, payload) => {
+exports.writePersonalTest = async (s, payload, resultId = null) => {
   const found = payload.personal && personalTests.find(payload.personal.categoryId, payload.personal.testTypeId);
   if (!s.personalSkills || !found) return { local: true };
   return call('AddEditPersonalTestResult', {
+    ...(resultId != null ? { id: Number(resultId) } : {}),
     studentClientId: Number(s.id),
     dateTime: payload.personal.dateTime,
     discipline: personalTests.discipline,
@@ -415,6 +417,25 @@ exports.writePersonalTest = async (s, payload) => {
     skills: found.type.skills.map(k => ({ skillId: k.id, score: Number(s.personalSkills[k.id]) })),
     commentHtml: commentHtml(s, payload),
   });
+};
+
+/**
+ * Id уже записанного персонального результата (для правки старых отметок, у которых Id не сохранён):
+ * GetPersonalTestResults по ученику за день урока → тот же тип теста, то же время и преподаватель. exclude — Id, уже занятые другими шагами.
+ * Не нашли — null.
+ */
+exports.findPersonalResult = async ({ clientId, dateTime, testTypeIds, teacherId, exclude = [] }) => {
+  const day = String(dateTime || '').slice(0, 10);
+  if (!day) return null;
+  const { PersonalTestResults = [] } = await call('GetPersonalTestResults',
+    { studentClientId: Number(clientId), from: `${day}T00:00`, to: `${day}T23:59` });
+  const minute = v => String(v || '').replace(' ', 'T').slice(0, 16);
+  const types = testTypeIds.map(Number);
+  const candidates = PersonalTestResults.filter(r => String(r.StudentClientId ?? clientId) === String(clientId)
+    && types.includes(Number(r.TestTypeId)) && !exclude.map(String).includes(String(r.Id))
+    && (!teacherId || r.TeacherId == null || String(r.TeacherId) === String(teacherId)));
+  const found = candidates.find(r => minute(r.DateTime) === minute(dateTime)) || (candidates.length === 1 ? candidates[0] : null);
+  return found?.Id ?? null;
 };
 
 /**

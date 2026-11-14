@@ -12,6 +12,8 @@ router.get('/me', lessons.me);
 router.get('/lessons', lessons.listLessons);
 router.get('/groups/:id/students', lessons.groupStudents);
 router.post('/lessons', lessons.saveLesson);
+router.post('/lessons/edit-request', lessons.requestEdit);   // запрос на исправление своей отметки (решает админка)
+router.post('/lessons/edit', lessons.editLesson);            // исправление после одобрения
 router.get('/profile', lessons.profile);
 
 // Директор и координатор

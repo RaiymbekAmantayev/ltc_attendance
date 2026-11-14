@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS submissions(
   attempts INT NOT NULL DEFAULT 0,                -- неудачных попыток досылки подряд
   slot TINYINT NOT NULL DEFAULT 1,                -- 1 — местный (ru), 2 — иностранный (en): на урок по одной отметке каждого типа
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  hh_results JSON NULL,                           -- Id результатов тестов в HollyHop по шагу («r:<ученик>», «p:<ученик>»); null — записан, Id неизвестен
+  coins_credited JSON NULL,                       -- сколько коинов уже начислено ученику по этой отметке (для правки — начисляется разница)
+  revision INT NOT NULL DEFAULT 0,                -- сколько раз отметку исправляли по одобренному запросу
+  updated_at TIMESTAMP NULL,                      -- когда отметку исправили
   UNIQUE KEY uq_lesson_teacher(group_id,lesson_date,teacher_id),   -- свою отметку преподаватель не правит
   UNIQUE KEY uq_lesson_slot(group_id,lesson_date,slot),
   INDEX(lesson_date), INDEX(teacher_id, lesson_date), INDEX(status),
@@ -63,6 +67,31 @@ CREATE TABLE IF NOT EXISTS absence_feedback(    -- обратная связь �
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_student_period(student_id, period_from, period_to),   -- повторная отправка за тот же период — обновление
   INDEX(period_from, period_to)
+);
+CREATE TABLE IF NOT EXISTS edit_requests(        -- запрос преподавателя на исправление своей отметки; правка — только после одобрения в админке
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  submission_key CHAR(36) NOT NULL,               -- submissions.idem_key
+  teacher_id INT NOT NULL,
+  group_id VARCHAR(64) NOT NULL, lesson_date DATE NOT NULL, group_name VARCHAR(255) NULL,
+  reason VARCHAR(1000) NOT NULL,
+  status ENUM('pending','approved','rejected','used') NOT NULL DEFAULT 'pending',
+  admin_note VARCHAR(500) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  decided_at DATETIME NULL, expires_at DATETIME NULL,   -- одобрение действует до expires_at (UTC)
+  used_at DATETIME NULL, edit_key CHAR(36) NULL,         -- нажатие «Сохранить исправление» (повтор того же нажатия безопасен)
+  INDEX(status), INDEX(submission_key)
+);
+CREATE TABLE IF NOT EXISTS hh_cleanup(           -- результаты тестов, которые после исправления надо удалить в HollyHop вручную: метода удаления в API 2.0 нет
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  submission_key CHAR(36) NOT NULL, teacher_id INT NULL,
+  group_id VARCHAR(64) NOT NULL, lesson_date DATE NOT NULL, group_name VARCHAR(255) NULL,
+  student_id VARCHAR(64) NOT NULL, student_name VARCHAR(255) NULL,   -- ClientId ученика
+  kind ENUM('daily','personal') NOT NULL,
+  test_type_id INT NULL, result_id VARCHAR(64) NULL,                 -- Id результата в HollyHop (null — не нашли, искать по ученику и дате)
+  date_time VARCHAR(32) NULL,
+  status ENUM('pending','done') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, done_at DATETIME NULL,
+  INDEX(status)
 );
 CREATE TABLE IF NOT EXISTS audit_log(
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
