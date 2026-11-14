@@ -68,6 +68,10 @@ npm start
 
 Статус, причина и дата обратной связи видны в админке («Выгрузка → Тесты учеников → Посещаемость») и в Excel-листе «Пропуски учеников».
 
+## API для кабинета ученика и ботов-кураторов (`/attendance-api/v1`)
+Только чтение (GET), ключ `ATTENDANCE_API_KEY` (`Authorization: Bearer` или `X-Api-Key`), без ключа API закрыт. Лимит — `ATTENDANCE_API_RATE_PER_MIN` (60/мин с IP) и `ATTENDANCE_API_MAX_CONCURRENT` (3 одновременных), по желанию IP-allowlist `ATTENDANCE_API_IPS`.
+Эндпоинты: `/lessons` (журнал), `/tests` (доп. тесты), `/students`, `/groups`, `/teachers`, `/meta`; все ключи — HollyHop (ClientId, EdUnit, Id преподавателя), курсорная пагинация и `updated_since`. Документация для потребителей — [docs/attendance-api.md](docs/attendance-api.md).
+
 ## Не вошло (нет данных/решений — см. SPEC Академчасти)
 ЗП и ставки, опоздания преподавателей (Dream Team), рейтинг, «Формирование групп», перевод учеников — ждут решений владельца и источников данных.
 

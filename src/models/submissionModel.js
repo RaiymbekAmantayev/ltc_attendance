@@ -78,6 +78,31 @@ exports.pageForTests = (from, to, afterId, limit) => query(
    FROM submissions x JOIN teachers t ON t.id = x.teacher_id
    WHERE x.lesson_date BETWEEN ? AND ? AND x.id > ? ORDER BY x.id LIMIT ?`, [from, to, afterId, limit]);
 
+/**
+ * Отметки для внешнего API (/attendance-api): страница по id начиная с fromId (включительно), с фильтрами.
+ * f: { dateFrom, dateTo, branch, groupId, teacherId, hhTeacherId, createdSince ('YYYY-MM-DD HH:MM:SS' UTC), clientId }.
+ * clientId — грубый отбор в БД (JSON_CONTAINS по payload.students[].id), точную проверку делает вызывающий.
+ */
+exports.pageForApi = (f, fromId, limit) => {
+  const where = ['x.id >= ?'], params = [fromId];
+  if (f.dateFrom)     { where.push('x.lesson_date >= ?'); params.push(f.dateFrom); }
+  if (f.dateTo)       { where.push('x.lesson_date <= ?'); params.push(f.dateTo); }
+  if (f.branch)       { where.push('x.branch = ?');       params.push(f.branch); }
+  if (f.groupId)      { where.push('x.group_id = ?');     params.push(f.groupId); }
+  if (f.teacherId)    { where.push('x.teacher_id = ?');   params.push(f.teacherId); }
+  if (f.hhTeacherId)  { where.push('t.hollihop_id = ?');  params.push(f.hhTeacherId); }
+  if (f.createdSince) { where.push('x.created_at >= ?');  params.push(f.createdSince); }
+  if (f.clientId) {
+    where.push("(JSON_CONTAINS(x.payload, JSON_OBJECT('id', ?), '$.students') OR JSON_CONTAINS(x.payload, JSON_OBJECT('id', ?), '$.students'))");
+    params.push(String(f.clientId), Number(f.clientId));
+  }
+  return query(
+    `SELECT x.id, x.group_id, x.group_name, x.branch, x.lesson_date, x.teacher_id, x.payload, x.created_at,
+            t.full_name, t.hollihop_id, t.lang
+     FROM submissions x JOIN teachers t ON t.id = x.teacher_id
+     WHERE ${where.join(' AND ')} ORDER BY x.id LIMIT ?`, [...params, limit]);
+};
+
 exports.countByStatus = async (from, to) => {
   const rows = await query(
     'SELECT status, COUNT(*) n FROM submissions WHERE lesson_date BETWEEN ? AND ? GROUP BY status', [from, to]);

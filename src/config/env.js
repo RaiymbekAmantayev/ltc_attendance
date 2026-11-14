@@ -29,6 +29,12 @@ module.exports = {
   auditRetentionDays: num('AUDIT_RETENTION_DAYS', 365),
   admin: { user: env.ADMIN_USER || 'admin', pass: env.ADMIN_PASS || '' },
   integrationKey: String(env.INTEGRATION_KEY || '').trim(),           // ключ сервиса менторов (/integration-api); пусто — закрыто
+  attendanceApi: {                                                     // /attendance-api/v1 — чтение данных кабинета (кабинет ученика, боты-кураторы)
+    key: String(env.ATTENDANCE_API_KEY || '').trim(),                  // пусто — API закрыт
+    ratePerMin: num('ATTENDANCE_API_RATE_PER_MIN', 60),                // запросов в минуту с одного IP
+    maxConcurrent: num('ATTENDANCE_API_MAX_CONCURRENT', 3),            // одновременных запросов на весь API (защита БД)
+    ips: list('ATTENDANCE_API_IPS'),                                   // IP-allowlist; пусто — без ограничения по IP
+  },
   directorTelegramIds: list('DIRECTOR_TG_IDS'),
   rules: {
     testRequired: true,                                                // ежедневный тест обязателен всегда (TEST_REQUIRED больше не читается)

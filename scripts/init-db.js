@@ -43,6 +43,11 @@ const COLUMNS = [
   if (!names.has('uq_lesson_teacher')) await connection.query('ALTER TABLE submissions ADD UNIQUE KEY uq_lesson_teacher(group_id, lesson_date, teacher_id)');
   if (!names.has('uq_lesson_slot')) await connection.query('ALTER TABLE submissions ADD UNIQUE KEY uq_lesson_slot(group_id, lesson_date, slot)');
 
+  // v0.5: индекс по created_at — инкрементальная выборка (updated_since) во внешнем API /attendance-api.
+  const [createdIdx] = await connection.query(
+    `SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = 'submissions' AND column_name = 'created_at' AND seq_in_index = 1`, [dbName]);
+  if (!createdIdx.length) { await connection.query('ALTER TABLE submissions ADD INDEX idx_created_at(created_at)'); console.log('миграция: submissions — индекс created_at'); }
+
   // hollihop_id теперь может быть пустым (директор/координатор)
   await connection.query('ALTER TABLE teachers MODIFY hollihop_id VARCHAR(64) NULL');
 

@@ -4,6 +4,7 @@ const compression = require('compression');
 const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 const integrationRoutes = require('./routes/integrationRoutes');
+const attendanceApiRoutes = require('./routes/attendanceApiRoutes');
 const { errorHandler } = require('./middleware/errorHandler');
 const { securityHeaders, rateLimit, requestLog } = require('./middleware/security');
 const { pool } = require('./config/db');
@@ -17,6 +18,7 @@ app.use(requestLog);
 app.use(securityHeaders);
 app.use(compression());                                  // gzip: список отметок и выгрузки — мегабайты JSON
 app.use('/integration-api', rateLimit, express.json({ limit: '2mb' }), integrationRoutes);   // сервис менторов: свой лимит тела
+app.use('/attendance-api/v1', attendanceApiRoutes);     // кабинет ученика / боты-кураторы: только чтение, своя квота
 app.use(express.json({ limit: '300kb' }));
 
 app.get('/healthz', async (req, res) => {

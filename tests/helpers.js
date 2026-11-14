@@ -7,6 +7,7 @@ const DB_URL = process.env.TEST_DATABASE_URL || 'mysql://root:@127.0.0.1:3306/lt
 Object.assign(process.env, {
   BOT_TOKEN: '123456:TEST-TOKEN', DATABASE_URL: DB_URL, HH_MOCK: '1', ADMIN_USER: 'admin', ADMIN_PASS: 'secret', INTEGRATION_KEY: 'mentor-key',
   DIRECTOR_TG_IDS: '999', HH_RETRY_BASE_MS: '1', HH_CACHE_TTL_MS: '0', APP_TZ: 'Asia/Almaty',
+  ATTENDANCE_API_KEY: 'att-key', ATTENDANCE_API_CACHE_MS: '0',
   ...(global.__TEST_ENV__ || {}),
 });
 

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Attendance API v1</title>
+<style>
+/* Печатный документ A4: фирменный фиолетовый LTC, Manrope из кабинета, моноширинный — Consolas. */
+@font-face { font-family: Manrope; font-weight: 500; src: url(../public/assets/fonts/manrope-cyrillic-500-normal.woff2) format("woff2"); unicode-range: U+0400-04FF; }
+@font-face { font-family: Manrope; font-weight: 500; src: url(../public/assets/fonts/manrope-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: Manrope; font-weight: 700; src: url(../public/assets/fonts/manrope-cyrillic-700-normal.woff2) format("woff2"); unicode-range: U+0400-04FF; }
+@font-face { font-family: Manrope; font-weight: 700; src: url(../public/assets/fonts/manrope-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: Manrope; font-weight: 800; src: url(../public/assets/fonts/manrope-cyrillic-800-normal.woff2) format("woff2"); unicode-range: U+0400-04FF; }
+@font-face { font-family: Manrope; font-weight: 800; src: url(../public/assets/fonts/manrope-latin-800-normal.woff2) format("woff2"); }
+
+:root {
+  --ink: #1d1729;
+  --muted: #5f5870;
+  --line: #e4dff0;
+  --tint: #f6f2fd;
+  --accent: #6a2bd9;
+  --accent-2: #c558f8;
+  --code-bg: #f3f1f7;
+  --ok: #1f7a4d;
+  --warn: #9a5b00;
+  --bad: #b3261e;
+  --sans: Manrope, "Segoe UI", Arial, sans-serif;
+  --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+}
+@page { size: A4; margin: 16mm 15mm 18mm;
+  @bottom-left { content: "Attendance API v1 · LTC"; font: 500 8pt Manrope, sans-serif; color: #8a8399; }
+  @bottom-right { content: counter(page) " / " counter(pages); font: 500 8pt Manrope, sans-serif; color: #8a8399; } }
+@page :first { @bottom-left { content: none; } }
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font: 500 9.6pt/1.5 var(--sans); color: var(--ink); background: #fff; }
+h1, h2, h3 { font-weight: 800; line-height: 1.2; text-wrap: balance; margin: 0; }
+h2 { font-size: 15pt; color: var(--accent); margin: 22pt 0 8pt; padding-bottom: 4pt; border-bottom: 1.5pt solid var(--line); break-after: avoid; }
+h3 { font-size: 11.5pt; margin: 14pt 0 5pt; break-after: avoid; display: flex; align-items: baseline; gap: 8pt; flex-wrap: wrap; }
+h2 .n { color: var(--accent-2); margin-right: 6pt; }
+p { margin: 0 0 6pt; }
+ul, ol { margin: 0 0 6pt; padding-left: 14pt; }
+li { margin-bottom: 2pt; }
+code { font: 8.6pt var(--mono); background: var(--code-bg); padding: 0.5pt 3pt; border-radius: 3pt; color: #3d2a66; white-space: nowrap; }
+pre { font: 8pt/1.45 var(--mono); background: var(--code-bg); border: 0.75pt solid var(--line); border-radius: 5pt; padding: 7pt 9pt; margin: 4pt 0 8pt; white-space: pre-wrap; word-break: break-word; break-inside: avoid; color: #2a2238; }
+pre code { background: none; padding: 0; white-space: inherit; font-size: inherit; }
+pre .c { color: #7d7590; }
+pre .k { color: var(--accent); font-weight: 700; }
+pre .s { color: #1f6a52; }
+b, strong { font-weight: 700; }
+
+table { width: 100%; border-collapse: collapse; margin: 4pt 0 9pt; font-size: 8.8pt; }
+th { text-align: left; font-weight: 700; color: #fff; background: var(--accent); padding: 4pt 6pt; }
+td { padding: 3.5pt 6pt; border-bottom: 0.75pt solid var(--line); vertical-align: top; }
+tr { break-inside: avoid; }
+tbody tr:nth-child(even) td { background: var(--tint); }
+td:first-child { white-space: nowrap; }
+table.wrap td:first-child { white-space: normal; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Шапка документа */
+.cover { background: linear-gradient(120deg, #4b1fa8, var(--accent) 55%, var(--accent-2)); color: #fff; border-radius: 8pt; padding: 18pt 20pt 16pt; margin-bottom: 12pt; }
+.cover .eyebrow { font-size: 8pt; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.85; font-weight: 700; }
+.cover h1 { font-size: 24pt; margin: 4pt 0 6pt; }
+.cover p { margin: 0; opacity: 0.95; max-width: 150mm; }
+.cover .url { margin-top: 10pt; display: inline-block; font: 700 10pt var(--mono); background: rgba(255,255,255,0.16); border: 0.75pt solid rgba(255,255,255,0.35); padding: 4pt 8pt; border-radius: 4pt; }
+.meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; margin-bottom: 4pt; }
+.meta > div { border: 0.75pt solid var(--line); border-radius: 5pt; padding: 6pt 8pt; }
+.meta .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+.meta .v { font-weight: 800; font-size: 10.5pt; }
+
+.method { font: 700 8pt var(--mono); color: #fff; background: var(--ok); padding: 1.5pt 5pt; border-radius: 3pt; }
+.path { font: 700 11pt var(--mono); color: var(--ink); }
+.tz { font-size: 8pt; font-weight: 700; color: var(--accent); background: var(--tint); border: 0.75pt solid var(--line); padding: 1pt 5pt; border-radius: 10pt; }
+
+.note { border-left: 3pt solid var(--accent); background: var(--tint); padding: 6pt 9pt; border-radius: 0 5pt 5pt 0; margin: 6pt 0 9pt; break-inside: avoid; }
+.note.warn { border-left-color: var(--warn); background: #fdf5e8; }
+.note.bad { border-left-color: var(--bad); background: #fcefee; }
+.note b:first-child { display: block; margin-bottom: 2pt; }
+.dont li::marker { content: "✕  "; color: var(--bad); font-weight: 800; }
+.do li::marker { content: "✓  "; color: var(--ok); font-weight: 800; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+.cols > * { min-width: 0; }
+.steps { counter-reset: s; list-style: none; padding: 0; }
+.steps li { counter-increment: s; padding-left: 20pt; position: relative; margin-bottom: 4pt; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 13pt; height: 13pt; border-radius: 50%; background: var(--accent); color: #fff; font-size: 7.5pt; font-weight: 800; display: grid; place-items: center; }
+.pb { break-before: page; }
+.small { font-size: 8.4pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="eyebrow">Кабинет Attendance · API для команды LTC</div>
+  <h1>Attendance API v1</h1>
+  <p>Доступ только на чтение к данным, которые преподаватели вносят в кабинете после урока: посещаемость, баллы, темы, ДЗ, результаты тестов, справочники учеников, групп и преподавателей. Ответ на ТЗ «API-доступ к кабинету Attendance» от 11.11.2026.</p>
+  <div class="url">https://attendance.ltsastana.kz/attendance-api/v1</div>
+</header>
+
+<div class="meta">
+  <div><div class="k">Формат</div><div class="v">REST · JSON · HTTPS</div></div>
+  <div><div class="k">Методы</div><div class="v">только GET</div></div>
+  <div><div class="k">Лимит</div><div class="v">60 / мин с IP</div></div>
+  <div><div class="k">Одновременно</div><div class="v">≤ 3 запроса</div></div>
+</div>
+
+<h2><span class="n">1</span>Подключение</h2>
+<table>
+  <tbody>
+    <tr><td>Базовый URL</td><td><code>https://attendance.ltsastana.kz/attendance-api/v1</code></td></tr>
+    <tr><td>Авторизация</td><td><code>Authorization: Bearer &lt;токен&gt;</code> или <code>X-Api-Key: &lt;токен&gt;</code></td></tr>
+    <tr><td>Сжатие</td><td>gzip, если клиент шлёт <code>Accept-Encoding: gzip</code></td></tr>
+    <tr><td>Даты</td><td>дата урока — <code>YYYY-MM-DD</code> (Asia/Almaty); метки времени — UTC <code>YYYY-MM-DDTHH:MM:SSZ</code></td></tr>
+    <tr><td>Справка</td><td><code>GET /meta</code> — шкалы, типы тестов, текущие лимиты</td></tr>
+  </tbody>
+</table>
+<p>Токен выдаёт разработчик кабинета лично, не открытым текстом в чате или почте. Храните его в секретах и не отдавайте в браузер: API рассчитан на серверные агенты. Ротация — по запросу; старый токен перестаёт работать сразу после замены на сервере.</p>
+
+<h2><span class="n">2</span>Ключи HollyHop</h2>
+<p>Все идентификаторы — родные HollyHop. Сопоставлять по ФИО не нужно.</p>
+<table>
+  <thead><tr><th>Сущность</th><th>Поле</th><th>Значение</th></tr></thead>
+  <tbody>
+    <tr><td>Ученик</td><td><code>hollyhop_client_id</code></td><td><b>ClientId</b> ученика в HollyHop. <code>student_id</code> — то же значение</td></tr>
+    <tr><td>Группа</td><td><code>hollyhop_edunit_id</code></td><td>Id учебной единицы (EdUnit). <code>group_id</code> — то же значение</td></tr>
+    <tr><td>Преподаватель</td><td><code>hollyhop_teacher_id</code></td><td>Id преподавателя в HollyHop (может быть <code>null</code> у сотрудников без уроков). <code>teacher_id</code> — внутренний id кабинета</td></tr>
+  </tbody>
+</table>
+<p class="small">Все id в ответах — строки, кроме <code>test_category_id</code>, <code>test_type_id</code> и <code>skill_id</code>.</p>
+
+<h2><span class="n">3</span>Эндпоинты</h2>
+<table>
+  <thead><tr><th>ТЗ</th><th>Эндпоинт</th><th>Что отдаёт</th><th>Пагинация</th></tr></thead>
+  <tbody>
+    <tr><td>4.4</td><td><code>GET /lessons</code></td><td>журнал: одна запись = один ученик на одном уроке</td><td>курсор</td></tr>
+    <tr><td>4.5</td><td><code>GET /tests</code></td><td>доп. тесты: Progress, Final, Entry, Revise&amp;Check, File NEF, Quick NEF</td><td>курсор</td></tr>
+    <tr><td>4.1</td><td><code>GET /students</code></td><td>ученики: группа, уровень, преподаватель, статус</td><td>offset</td></tr>
+    <tr><td>4.3</td><td><code>GET /groups</code></td><td>справочник групп</td><td>offset</td></tr>
+    <tr><td>4.2</td><td><code>GET /teachers</code></td><td>справочник преподавателей</td><td>offset</td></tr>
+    <tr><td>—</td><td><code>GET /meta</code></td><td>шкалы оценок, типы тестов и максимумы, лимиты</td><td>—</td></tr>
+    <tr><td>4.6</td><td>—</td><td>рекомендаций в кабинете нет (раздел 7)</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h3><span class="method">GET</span><span class="path">/lessons</span><span class="tz">ТЗ 4.4</span></h3>
+<p>Всё, что преподаватель заполняет после урока. Если урок отметили два преподавателя (местный и иностранный), у ученика будет две записи с одинаковым <code>lesson_id</code> и разным <code>teacher_type</code>.</p>
+<table>
+  <thead><tr><th>Параметр</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>date_from</code>, <code>date_to</code></td><td>период по дате урока, <code>YYYY-MM-DD</code>, не длиннее 366 дней</td></tr>
+    <tr><td><code>updated_since</code></td><td>только записи, появившиеся с этого момента: <code>2026-11-14T08:00:00Z</code>, <code>2026-11-14T13:00:00+05:00</code> или <code>2026-11-14</code> (= 00:00 UTC). Время без часового пояса → 400</td></tr>
+    <tr><td><code>hollyhop_client_id</code></td><td>один ученик</td></tr>
+    <tr><td><code>group_id</code></td><td>группа (= EdUnit HollyHop)</td></tr>
+    <tr><td><code>teacher_id</code>, <code>hollyhop_teacher_id</code></td><td>преподаватель</td></tr>
+    <tr><td><code>branch</code></td><td>филиал, точное название (<code>Абая</code>, <code>Хайвилл</code>…)</td></tr>
+    <tr><td><code>attendance</code></td><td><code>present</code> / <code>absent</code></td></tr>
+    <tr><td><code>limit</code></td><td>1–500, по умолчанию 100</td></tr>
+    <tr><td><code>cursor</code></td><td>значение <code>page.next_cursor</code> из предыдущего ответа</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>Период по умолчанию</b>Без <code>date_from</code>, <code>date_to</code> и <code>updated_since</code> возвращаются последние 30 дней.</div>
+
+<pre><code><span class="k">GET</span> /lessons?hollyhop_client_id=801&amp;date_from=2026-11-01&amp;date_to=2026-11-14
+{
+  "data": [{
+    "record_id": "1532:801",  "lesson_id": "81:2026-11-11",  "submission_id": "1532",
+    "date": "2026-11-11",
+    "group_id": "81", "hollyhop_edunit_id": "81", "group_name": "G81",
+    "branch": "Абая", "level": "Elementary",
+    "teacher_id": "12", "hollyhop_teacher_id": "201", "teacher_fio": "Иванова Анна",
+    "teacher_type": "local",
+    "student_id": "801", "hollyhop_client_id": "801", "student_fio": "Аня",
+    "attendance": "present",  "absence_reason": null,
+    "homework": 4, "activity": 5, "behaviour": 3,
+    "homework_assignment": "Ex 1-3",  "topic": "Present Simple",  "ktp_topic_id": 7,
+    "comment": null,  "has_extra_test": false,
+    "updated_at": "2026-11-11T09:41:07Z"
+  }],
+  "page": { "limit": 100, "next_cursor": null, "has_more": false }
+}</code></pre>
+
+<table class="wrap">
+  <thead><tr><th style="width:34%">Поле</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>record_id</code></td><td>уникальный id записи (<code>&lt;submission_id&gt;:&lt;ClientId&gt;</code>) — ключ для дедупликации у вас</td></tr>
+    <tr><td><code>lesson_id</code></td><td>урок: <code>&lt;EdUnit&gt;:&lt;дата&gt;</code></td></tr>
+    <tr><td><code>teacher_type</code></td><td><code>local</code> — местный, <code>foreign</code> — иностранный</td></tr>
+    <tr><td><code>attendance</code></td><td><code>present</code> — был, <code>absent</code> — не был</td></tr>
+    <tr><td><code>homework</code>, <code>activity</code>, <code>behaviour</code></td><td>баллы <b>0–5</b>: ДЗ, активность, дисциплина (ежедневный тест). У отсутствующих — <code>null</code></td></tr>
+    <tr><td><code>homework_assignment</code></td><td>текст ДЗ, заданного на уроке (одно на группу)</td></tr>
+    <tr><td><code>topic</code></td><td>пройденная тема урока</td></tr>
+    <tr><td><code>ktp_topic_id</code></td><td>id темы из КТП, если тема выбрана из плана</td></tr>
+    <tr><td><code>has_extra_test</code></td><td>ученик писал доп. тест на этом уроке; он есть в <code>/tests</code> с <code>test_id</code> = <code>record_id</code></td></tr>
+    <tr><td><code>absence_reason</code>, <code>comment</code></td><td>всегда <code>null</code> — в кабинете не ведутся (раздел 7)</td></tr>
+    <tr><td><code>updated_at</code></td><td>когда отметка попала в кабинет (UTC). После сохранения отметки не меняются</td></tr>
+  </tbody>
+</table>
+
+<h3><span class="method">GET</span><span class="path">/tests</span><span class="tz">ТЗ 4.5</span></h3>
+<p>Доп. (персональные) тесты, отмеченные на уроке. Ежедневный тест (ДЗ, активность, поведение) — в <code>/lessons</code>. Параметры — как у <code>/lessons</code> (кроме <code>attendance</code>), плюс <code>test_category_id</code>.</p>
+<pre><code>{
+  "data": [{
+    "test_id": "1533:801", "submission_id": "1533", "date": "2026-11-11",
+    "group_id": "81", "hollyhop_edunit_id": "81", "group_name": "G81", "branch": "Абая",
+    "level": "Elementary", "teacher_id": "14", "hollyhop_teacher_id": "202",
+    "teacher_fio": "Smith John", "teacher_type": "foreign",
+    "student_id": "801", "hollyhop_client_id": "801", "student_fio": "Аня",
+    "test_category_id": 2, "test_type": "Quick Test NEF",
+    "test_type_id": 2, "test_name": "Quick Test NEF",
+    "score": 42, "max_score": 50, "percent": 84,
+    "skills": [
+      { "skill_id": 3, "name": "Grammar",       "score": 18, "max": 20 },
+      { "skill_id": 4, "name": "Vocabulary",    "score": 15, "max": 20 },
+      { "skill_id": 5, "name": "Pronunciation", "score": 9,  "max": 10 }
+    ],
+    "updated_at": "2026-11-11T09:43:10Z"
+  }],
+  "page": { "limit": 100, "next_cursor": null, "has_more": false }
+}</code></pre>
+<p><code>percent</code> — от 0 до 100, один знак после запятой. Типы тестов (ответ на п. 8.4 ТЗ):</p>
+<table>
+  <thead><tr><th>test_category_id</th><th>test_type</th><th>Типы (test_name)</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>Progress Test</td><td>Progress Test</td></tr>
+    <tr><td class="num">4</td><td>Final Test</td><td>Final Test</td></tr>
+    <tr><td class="num">6</td><td>Entry test</td><td>Elementary … Advanced</td></tr>
+    <tr><td class="num">5</td><td>Revise&amp;Check</td><td>по двум главам / Advanced / Upper-Intermediate</td></tr>
+    <tr><td class="num">45</td><td>File Test NEF</td><td>File 1 … File 12</td></tr>
+    <tr><td class="num">2</td><td>Quick Test NEF</td><td>Quick Test NEF</td></tr>
+  </tbody>
+</table>
+<p class="small">Навыки и максимумы каждого типа — в <code>GET /meta</code> → <code>test_categories</code>.</p>
+
+<h3><span class="method">GET</span><span class="path">/students</span><span class="tz">ТЗ 4.1</span></h3>
+<p>Ученики, у которых был хотя бы один урок в кабинете за окно (по умолчанию 60 дней). Текущая группа — та, где был последний урок; основной преподаватель — тот, у кого больше всего уроков с учеником в этой группе.</p>
+<table>
+  <thead><tr><th>Параметр</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>active_since</code></td><td>начало окна, <code>YYYY-MM-DD</code>, не раньше 180 дней назад; по умолчанию сегодня − 60</td></tr>
+    <tr><td><code>status</code></td><td><code>active</code> — последний урок не старше 30 дней; <code>inactive</code> — старше</td></tr>
+    <tr><td><code>hollyhop_client_id</code>, <code>group_id</code>, <code>teacher_id</code>, <code>branch</code></td><td>фильтры (по любой из групп ученика)</td></tr>
+    <tr><td><code>limit</code>, <code>offset</code></td><td><code>limit</code> 1–500 (по умолчанию 100), <code>offset</code> ≥ 0</td></tr>
+  </tbody>
+</table>
+<pre><code>{
+  "data": [{
+    "student_id": "801", "hollyhop_client_id": "801", "fio": "Аня",
+    "branch": "Хайвилл", "group_id": "82", "group_name": "G82", "level": "Pre-Intermediate",
+    "teacher_id": "12", "hollyhop_teacher_id": "201", "teacher_fio": "Иванова Анна",
+    "teachers": [{ "teacher_id": "12", "hollyhop_teacher_id": "201", "fio": "Иванова Анна",
+                   "type": "local", "last_lesson_date": "2026-11-13", "lessons_count": 1 }],
+    "status": "active", "last_lesson_date": "2026-11-13",
+    "groups": [ { "group_id": "82", "group_name": "G82", "level": "Pre-Intermediate", … },
+                { "group_id": "81", "group_name": "G81", "level": "Elementary", … } ]
+  }],
+  "page":   { "limit": 100, "offset": 0, "total": 1, "has_more": false },
+  "window": { "active_since": "2026-09-15", "to": "2026-11-14" }
+}</code></pre>
+<div class="note warn"><b>Справочник строится по отметкам кабинета, а не по составам HollyHop</b>Ученик, которого ни разу не отмечали в кабинете, сюда не попадёт; полный состав групп — в HollyHop. У очень старых отметок <code>fio</code> может быть <code>null</code>. Справочник кэшируется на 5 минут.</div>
+
+<h3><span class="method">GET</span><span class="path">/groups</span><span class="tz">ТЗ 4.3</span></h3>
+<p>Параметры: <code>active_since</code>, <code>status</code>, <code>group_id</code>, <code>teacher_id</code>, <code>branch</code>, <code>limit</code>, <code>offset</code>.</p>
+<pre><code>{
+  "data": [{
+    "group_id": "81", "hollyhop_edunit_id": "81", "name": "G81", "branch": "Абая",
+    "level": "Elementary", "teacher_id": "12", "hollyhop_teacher_id": "201",
+    "teacher_fio": "Иванова Анна",
+    "teachers": [ { "teacher_id": "12", "type": "local", … }, { "teacher_id": "14", "type": "foreign", … } ],
+    "students_count": 2, "lessons_count": 9, "last_lesson_date": "2026-11-11",
+    "status": "active", "schedule": null
+  }],
+  "page": { "limit": 100, "offset": 0, "total": 1, "has_more": false },
+  "window": { "active_since": "2026-09-15", "to": "2026-11-14" }
+}</code></pre>
+<p><code>schedule</code> всегда <code>null</code>: расписание ведётся в HollyHop (<code>GetEdUnits</code> по <code>hollyhop_edunit_id</code>). <code>students_count</code> — число разных учеников в отметках за окно.</p>
+
+<h3><span class="method">GET</span><span class="path">/teachers</span><span class="tz">ТЗ 4.2</span></h3>
+<p>Параметры: <code>branch</code>, <code>active</code> (<code>true</code>/<code>false</code>), <code>limit</code>, <code>offset</code>. Telegram ID не отдаётся.</p>
+<pre><code>{
+  "data": [{ "teacher_id": "12", "hollyhop_teacher_id": "201", "fio": "Иванова Анна",
+             "branch": "Абая", "type": "local", "role": "teacher", "active": true }],
+  "page": { "limit": 100, "offset": 0, "total": 1, "has_more": false }
+}</code></pre>
+<p><code>role</code>: <code>teacher</code> / <code>coordinator</code> / <code>director</code>.</p>
+
+<h3><span class="method">GET</span><span class="path">/meta</span></h3>
+<p>Шкала ежедневного теста (<code>daily_scores.scale</code> = 0–5), значения <code>attendance</code>, все категории и типы тестов с навыками и максимумами, список недоступных полей и текущие лимиты. Вызывайте один раз при старте агента, а не перед каждым запросом.</p>
+
+<h2 class="pb"><span class="n">4</span>Как правильно пользоваться API</h2>
+
+<h3>4.1 Выгрузка по курсору (/lessons, /tests)</h3>
+<p>Идите по <code>page.next_cursor</code>, пока он не станет <code>null</code>. Курсор привязан к фильтрам — не меняйте параметры между страницами.</p>
+<div class="note"><b>Страница может быть короче limit и даже пустой при has_more: true</b>За один вызов сервер просматривает не больше 2000 отметок, чтобы не нагружать базу. Это нормально: просто запросите следующую страницу.</div>
+
+<pre><code><span class="k">import</span> os, time, requests
+
+BASE = <span class="s">"https://attendance.ltsastana.kz/attendance-api/v1"</span>
+S = requests.Session()
+S.headers[<span class="s">"Authorization"</span>] = f<span class="s">"Bearer {os.environ['ATT_TOKEN']}"</span>
+
+<span class="k">def</span> get(path, **params):
+    <span class="k">for</span> attempt <span class="k">in</span> range(5):
+        r = S.get(BASE + path, params=params, timeout=60)
+        <span class="k">if</span> r.status_code == 429:                <span class="c"># лимит: ждём, сколько сказал сервер</span>
+            time.sleep(int(r.headers.get(<span class="s">"Retry-After"</span>, <span class="s">"5"</span>)))
+            <span class="k">continue</span>
+        <span class="k">if</span> r.status_code &gt;= 500:
+            time.sleep(2 ** attempt)
+            <span class="k">continue</span>
+        r.raise_for_status()                    <span class="c"># 400/401/403 — ошибка запроса, не повторять</span>
+        <span class="k">return</span> r.json()
+    <span class="k">raise</span> RuntimeError(f<span class="s">"{path}: не удалось после повторов"</span>)
+
+<span class="k">def</span> iterate(path, **params):
+    cursor = None
+    <span class="k">while True</span>:
+        extra = {<span class="s">"cursor"</span>: cursor} <span class="k">if</span> cursor <span class="k">else</span> {}
+        page = get(path, **params, limit=500, **extra)
+        <span class="k">yield from</span> page[<span class="s">"data"</span>]
+        cursor = page[<span class="s">"page"</span>][<span class="s">"next_cursor"</span>]
+        <span class="k">if not</span> cursor:
+            <span class="k">return</span>
+
+<span class="k">for</span> rec <span class="k">in</span> iterate(<span class="s">"/lessons"</span>, date_from=<span class="s">"2026-11-01"</span>, date_to=<span class="s">"2026-11-14"</span>):
+    save(rec)                                   <span class="c"># upsert по rec["record_id"]</span></code></pre>
+
+<p>Node.js 18+:</p>
+<pre><code><span class="k">const</span> BASE = <span class="s">'https://attendance.ltsastana.kz/attendance-api/v1'</span>;
+<span class="k">const</span> headers = { Authorization: <span class="s">`Bearer ${process.env.ATT_TOKEN}`</span> };
+<span class="k">const</span> sleep = ms =&gt; <span class="k">new</span> Promise(r =&gt; setTimeout(r, ms));
+
+<span class="k">async function</span> get(path, params) {
+  <span class="k">for</span> (<span class="k">let</span> attempt = 0; attempt &lt; 5; attempt++) {
+    <span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">`${BASE}${path}?${new URLSearchParams(params)}`</span>, { headers });
+    <span class="k">if</span> (res.status === 429) { <span class="k">await</span> sleep(Number(res.headers.get(<span class="s">'retry-after'</span>) || 5) * 1000); <span class="k">continue</span>; }
+    <span class="k">if</span> (res.status &gt;= 500) { <span class="k">await</span> sleep(2 ** attempt * 1000); <span class="k">continue</span>; }
+    <span class="k">if</span> (!res.ok) <span class="k">throw new</span> Error(<span class="s">`${path}: ${res.status} ${await res.text()}`</span>);
+    <span class="k">return</span> res.json();
+  }
+  <span class="k">throw new</span> Error(<span class="s">`${path}: не удалось после повторов`</span>);
+}
+
+<span class="k">async function*</span> iterate(path, params = {}) {
+  <span class="k">let</span> cursor;
+  <span class="k">do</span> {
+    <span class="k">const</span> page = <span class="k">await</span> get(path, { ...params, limit: 500, ...(cursor ? { cursor } : {}) });
+    <span class="k">yield*</span> page.data;
+    cursor = page.page.next_cursor;
+  } <span class="k">while</span> (cursor);
+}</code></pre>
+
+<h3>4.2 Инкрементальная синхронизация (раз в час)</h3>
+<ol class="steps">
+  <li>Первый запуск: полная выгрузка <code>/lessons</code> и <code>/tests</code> за нужный период — по месяцам, период не длиннее 366 дней.</li>
+  <li>Сохраните у себя <code>max(updated_at)</code> из полученных записей.</li>
+  <li>Следующий запуск: <code>updated_since</code> = сохранённое значение <b>минус 5 минут</b> (запас на отметки, которые сохранялись во время выгрузки).</li>
+  <li>Записи <b>upsert-ите по <code>record_id</code> / <code>test_id</code></b>: из-за запаса часть придёт повторно.</li>
+</ol>
+<p class="small">Отметки после сохранения не редактируются, поэтому <code>updated_at</code> — время появления записи. Удалений нет.</p>
+
+<h3>4.3 Точечный запрос по ученику (бот-куратор, «Мой профиль»)</h3>
+<pre><code>GET /students?hollyhop_client_id=801                       <span class="c">→ группа, уровень, преподаватель</span>
+GET /lessons?hollyhop_client_id=801&amp;date_from=2026-10-15   <span class="c">→ посещаемость, баллы, темы, ДЗ</span>
+GET /tests?hollyhop_client_id=801&amp;date_from=2026-05-14     <span class="c">→ тесты за полгода</span></code></pre>
+<p>Кэшируйте ответ у себя хотя бы на несколько минут: данные меняются только тогда, когда преподаватель отмечает урок.</p>
+
+<div class="cols">
+  <div>
+    <h3>4.4 Правильно</h3>
+    <ul class="do">
+      <li>Запросы только с сервера, токен — в секретах</li>
+      <li>Большие объёмы — через курсор с <code>limit=500</code></li>
+      <li>Синхронизация через <code>updated_since</code></li>
+      <li>При 429 ждать <code>Retry-After</code></li>
+      <li>Дедупликация по <code>record_id</code> / <code>test_id</code></li>
+    </ul>
+  </div>
+  <div>
+    <h3>4.5 Не делайте так</h3>
+    <ul class="dont">
+      <li>Опрос чаще раза в 5–10 минут для синхронизации</li>
+      <li>Больше 2–3 параллельных запросов</li>
+      <li>Перебор всех учеников по одному через <code>hollyhop_client_id</code></li>
+      <li>Запросы из браузера или мини-аппа</li>
+      <li>Повторы при 400 / 401 / 403</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="n">5</span>Лимиты и ошибки</h2>
+<table>
+  <thead><tr><th>Ограничение</th><th>Значение</th><th>Что приходит</th></tr></thead>
+  <tbody>
+    <tr><td>Запросов в минуту с одного IP (вкл. без токена)</td><td class="num">60</td><td><code>429 rate_limited</code> + <code>Retry-After</code></td></tr>
+    <tr><td>Одновременных запросов на весь API</td><td class="num">3</td><td><code>429 too_many_concurrent</code> + <code>Retry-After: 2</code></td></tr>
+    <tr><td>Неверных токенов за 15 мин с одного IP</td><td class="num">10</td><td><code>429 too_many_attempts</code> на 15 минут</td></tr>
+    <tr><td>Записей на страницу</td><td class="num">1–500</td><td><code>400 bad_param</code></td></tr>
+    <tr><td>Период <code>/lessons</code>, <code>/tests</code></td><td class="num">≤ 366 дней</td><td><code>400 period_too_long</code></td></tr>
+    <tr><td>Окно справочников</td><td class="num">≤ 180 дней</td><td><code>400 bad_param</code> (<code>active_since</code>)</td></tr>
+    <tr><td>Отметок, просматриваемых за вызов</td><td class="num">2000</td><td>неполная страница + <code>next_cursor</code></td></tr>
+  </tbody>
+</table>
+<p>В каждом ответе есть заголовки <code>X-RateLimit-Limit</code> и <code>X-RateLimit-Remaining</code> — сколько запросов осталось в текущей минуте.</p>
+
+<table>
+  <thead><tr><th>Код</th><th>error</th><th>Что делать</th></tr></thead>
+  <tbody>
+    <tr><td>400</td><td><code>bad_param</code> (+ <code>param</code>), <code>period_too_long</code></td><td>исправить запрос</td></tr>
+    <tr><td>401</td><td><code>unauthorized</code></td><td>проверить токен</td></tr>
+    <tr><td>403</td><td><code>ip_not_allowed</code></td><td>IP не в allowlist — сообщить разработчику кабинета</td></tr>
+    <tr><td>404</td><td><code>not_found</code></td><td>неверный путь</td></tr>
+    <tr><td>405</td><td><code>read_only</code></td><td>API только на чтение</td></tr>
+    <tr><td>429</td><td><code>rate_limited</code>, <code>too_many_concurrent</code>, <code>too_many_attempts</code></td><td>подождать <code>Retry-After</code> секунд</td></tr>
+    <tr><td>500</td><td><code>server</code></td><td>повторить с паузой; если повторяется — сообщить</td></tr>
+  </tbody>
+</table>
+<pre><code>HTTP/1.1 400 Bad Request
+{ "error": "bad_param", "param": "updated_since" }</code></pre>
+
+<h2><span class="n">6</span>Безопасность и персональные данные</h2>
+<ul>
+  <li>Доступ только по токену и только по HTTPS. Токен сравнивается за постоянное время и не пишется в логи.</li>
+  <li>Ответы идут с <code>Cache-Control: no-store</code>: прокси и клиенты не кэшируют персональные данные.</li>
+  <li>IP-allowlist: пришлите исходящие IP ваших агентов — включим, остальные получат <code>403 ip_not_allowed</code>.</li>
+  <li>Только чтение и только поля из этого документа: без Telegram ID, телефонов и т.п.</li>
+  <li>Токен API менторов и этот токен разные: один не открывает другой API.</li>
+</ul>
+
+<h2><span class="n">7</span>Чего в кабинете нет</h2>
+<table class="wrap">
+  <thead><tr><th style="width:32%">Поле из ТЗ</th><th>Статус</th></tr></thead>
+  <tbody>
+    <tr><td>Рекомендации преподавателя (п. 4.6)</td><td><b>В кабинете не собираются</b>, эндпоинта нет. Если нужно — добавим поле в форму урока и эндпоинт <code>/recommendations</code> отдельной задачей</td></tr>
+    <tr><td><code>absence_reason</code></td><td>причину пропуска преподаватель не вводит → всегда <code>null</code></td></tr>
+    <tr><td><code>comment</code></td><td>отдельного комментария нет: в HollyHop комментарием уходит тема урока (<code>topic</code>) → всегда <code>null</code></td></tr>
+    <tr><td><code>schedule</code> групп</td><td>ведётся в HollyHop → <code>null</code></td></tr>
+    <tr><td>ДЗ / активность / поведение</td><td>есть, шкала <b>0–5</b> (в ТЗ 1–5; 0 = «не выполнено»). Только у присутствовавших</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">8</span>Ответы на п. 8 ТЗ</h2>
+<table class="wrap">
+  <thead><tr><th style="width:38%">Вопрос</th><th>Ответ</th></tr></thead>
+  <tbody>
+    <tr><td>1. Способ интеграции, URL, токен</td><td>REST API, <code>https://attendance.ltsastana.kz/attendance-api/v1</code>; токен — лично</td></tr>
+    <tr><td>2. Описание эндпоинтов и полей</td><td>этот документ (разделы 3–5) и <code>GET /meta</code></td></tr>
+    <tr><td>3. HollyHop-идентификаторы</td><td>ClientId ученика, EdUnit группы, Id преподавателя — во всех записях (раздел 2)</td></tr>
+    <tr><td>4. Типы тестов и шкалы</td><td>раздел 3 (<code>/tests</code>) и <code>/meta</code>; ДЗ / активность / поведение — 0–5</td></tr>
+    <tr><td>5. Лимиты запросов</td><td>60 в минуту с IP, 3 одновременных, до 500 записей на страницу (раздел 5)</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">9</span>Проверка доступа</h2>
+<pre><code>curl -s -H <span class="s">"Authorization: Bearer $ATT_TOKEN"</span> \
+  https://attendance.ltsastana.kz/attendance-api/v1/meta</code></pre>
+<p>Ответ <code>200</code> с JSON-справкой — токен работает. <code>401</code> — неверный токен, <code>403</code> — IP не в allowlist.</p>
+
+</body>
+</html>

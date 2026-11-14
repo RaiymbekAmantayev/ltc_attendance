@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS submissions(
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_lesson_teacher(group_id,lesson_date,teacher_id),   -- свою отметку преподаватель не правит
   UNIQUE KEY uq_lesson_slot(group_id,lesson_date,slot),
-  INDEX(lesson_date), INDEX(teacher_id, lesson_date), INDEX(status)
+  INDEX(lesson_date), INDEX(teacher_id, lesson_date), INDEX(status),
+  INDEX idx_created_at(created_at)                -- /attendance-api: выборка updated_since
 );
 CREATE TABLE IF NOT EXISTS ktp_categories(       -- КТП: учебные линейки (Nef, Solutions, Go better…)
   id INT AUTO_INCREMENT PRIMARY KEY,

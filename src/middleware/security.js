@@ -23,7 +23,7 @@ exports.securityHeaders = (req, res, next) => {
     'Cross-Origin-Opener-Policy': 'same-origin',
   });
   // Данные кабинета (ПДн) не кэшируем; статика — коротко.
-  if (/^\/(api|admin-api)\b/.test(req.path)) res.set('Cache-Control', 'no-store');
+  if (/^\/(api|admin-api|attendance-api)\b/.test(req.path)) res.set('Cache-Control', 'no-store');
   next();
 };
 
@@ -40,8 +40,43 @@ exports.limiter = ({ windowMs, max }) => {
   return {
     hit: key => { fresh(key).push(Date.now()); },
     blocked: key => fresh(key).length >= max,
+    count: key => fresh(key).length,
+    /** Через сколько мс освободится место в окне (0 — уже свободно). */
+    resetIn: key => { const list = fresh(key); return list.length < max ? 0 : Math.max(0, windowMs - (Date.now() - list[list.length - max])); },
   };
 };
+
+/**
+ * Квота внешнего API: perMin запросов в минуту с IP и не больше maxConcurrent запросов одновременно на весь API.
+ * Заголовки X-RateLimit-Limit / X-RateLimit-Remaining; при превышении — 429 с Retry-After (секунды).
+ */
+exports.apiQuota = ({ perMin, maxConcurrent }) => {
+  const window = exports.limiter({ windowMs: 60 * 1000, max: perMin });
+  let inFlight = 0;
+  return (req, res, next) => {
+    res.set('X-RateLimit-Limit', String(perMin));
+    if (window.blocked(req.ip)) {
+      res.set({ 'Retry-After': String(Math.max(1, Math.ceil(window.resetIn(req.ip) / 1000))), 'X-RateLimit-Remaining': '0' });
+      return res.status(429).json({ error: 'rate_limited' });
+    }
+    window.hit(req.ip);
+    res.set('X-RateLimit-Remaining', String(Math.max(0, perMin - window.count(req.ip))));
+    if (inFlight >= maxConcurrent) {
+      res.set('Retry-After', '2');
+      return res.status(429).json({ error: 'too_many_concurrent' });
+    }
+    inFlight++;
+    let done = false;
+    const release = () => { if (!done) { done = true; inFlight--; } };
+    res.on('finish', release);
+    res.on('close', release);
+    next();
+  };
+};
+
+/** Доступ только с перечисленных IP (пустой список — с любого). */
+exports.ipAllowlist = ips => (req, res, next) => (!ips.length || ips.includes(req.ip) || ips.includes(String(req.ip).replace(/^::ffff:/, ''))
+  ? next() : res.status(403).json({ error: 'ip_not_allowed' }));
 
 const apiLimit = exports.limiter({ windowMs: 60 * 1000, max: rateLimitPerMin });
 exports.rateLimit = (req, res, next) => {
