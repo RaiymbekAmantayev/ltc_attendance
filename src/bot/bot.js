@@ -12,12 +12,12 @@ const telegram = (method, body) =>
 async function handleMessage(message) {
   if (!/^\/(start|id|help)\b/.test(message?.text || '')) return;
   const hint = isHttps
-    ? 'Откройте кабинет кнопкой ниже. / Open the cabinet with the button below.'
+    ? 'Кабинетті төмендегі батырмамен ашыңыз. / Откройте кабинет кнопкой ниже. / Open the cabinet with the button below.'
     : 'В .env нужен APP_URL с https-адресом.';
   await telegram('sendMessage', {
     chat_id: message.chat.id,
-    text: `Ваш Telegram ID / Your Telegram ID: ${message.from.id}\n\n${hint}`,
-    reply_markup: isHttps ? { inline_keyboard: [[{ text: 'Открыть кабинет · Open', web_app: { url: appUrl } }]] } : undefined,
+    text: `Сіздің Telegram ID / Ваш Telegram ID / Your Telegram ID: ${message.from.id}\n\n${hint}`,
+    reply_markup: isHttps ? { inline_keyboard: [[{ text: 'Кабинетті ашу · Открыть · Open', web_app: { url: appUrl } }]] } : undefined,
   });
 }
 
@@ -28,8 +28,8 @@ async function setup() {
     await telegram('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: appUrl } } });
   }
   await telegram('setMyCommands', { commands: [
-    { command: 'start', description: 'Открыть кабинет / Open cabinet' },
-    { command: 'id', description: 'Мой Telegram ID / My Telegram ID' },
+    { command: 'start', description: 'Кабинетті ашу / Открыть кабинет / Open cabinet' },
+    { command: 'id', description: 'Менің Telegram ID / Мой Telegram ID / My Telegram ID' },
   ] });
   const me = await telegram('getMe', {});
   console.log('bot: запущен как @' + (me.result?.username || '?'));

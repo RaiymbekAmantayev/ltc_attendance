@@ -9,7 +9,8 @@
     state: { lang: LTC.store.get('ltc-lang') || null, me: null, tab: null, date: LTC.localToday(), group: null, rejected: [], offline: false },
   });
   const state = APP.state;
-  const T = () => TEXTS[state.lang || 'ru'];
+  const LANGS = ['kk', 'ru', 'en'];                             // казахский — первый
+  const T = () => TEXTS[state.lang] || TEXTS.kk;
   const fmt = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? '');
   APP.T = T; APP.fmt = fmt;
 
@@ -114,7 +115,7 @@
         <img class="brand-logo" src="/assets/logo.webp" alt="LTC">
         <div class="brand-txt"><div class="brand-title">LTC</div><div class="brand-sub" id="sub"></div></div>
         <div class="spacer"></div>
-        <button class="iconbtn" data-act="lang" aria-label="Language">${(state.lang || 'ru').toUpperCase()}</button>
+        <button class="iconbtn" data-act="lang" aria-label="Language">${({ kk: 'ҚАЗ', ru: 'РУС', en: 'ENG' })[state.lang] || 'ҚАЗ'}</button>
         ${LTC.themeButton()}
       </header>
       <div class="content"><div id="banner"></div><div id="view" class="view"></div></div>
@@ -494,7 +495,7 @@
     const act = el.dataset.act;
     if (act === 'theme') LTC.toggleTheme(tg);
     else if (act === 'lang') {
-      state.lang = state.lang === 'en' ? 'ru' : 'en';
+      state.lang = LANGS[(LANGS.indexOf(state.lang) + 1) % LANGS.length];   // ҚАЗ → РУС → ENG
       LTC.store.set('ltc-lang', state.lang);
       shell(); go(state.tab);
     }
@@ -537,20 +538,20 @@
   async function boot() {
     LTC.initTheme(tg);
     if (tg) { tg.ready(); tg.expand(); tg.BackButton.onClick(() => { if (state.group) closeGroup(); }); }
-    state.lang = state.lang || 'ru';
+    if (!LANGS.includes(state.lang)) state.lang = 'kk';
 
     if (!tg || !tg.initData) {
-      root.innerHTML = `<div class="empty" style="padding-top:30vh">${esc(TEXTS.ru.openInTelegram)}<br>${esc(TEXTS.en.openInTelegram)}</div>`;
+      root.innerHTML = `<div class="empty" style="padding-top:30vh">${LANGS.map(l => esc(TEXTS[l].openInTelegram)).join('<br>')}</div>`;
       return;
     }
     try { state.me = await api('/me'); }
     catch (e) {
       const id = tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : '';
-      root.innerHTML = `<div class="empty" style="padding-top:26vh"><img class="brand-logo" src="/assets/logo.webp" alt="LTC"><p>${esc(e.status === 403 ? TEXTS.ru.notRegistered : errText(e))}</p>
-        ${e.status === 403 ? `<h2 class="title" style="font-size:28px">${esc(id)}</h2><p class="mut">${esc(TEXTS.en.notRegistered)}</p>` : ''}</div>`;
+      root.innerHTML = `<div class="empty" style="padding-top:26vh"><img class="brand-logo" src="/assets/logo.webp" alt="LTC"><p>${esc(e.status === 403 ? TEXTS.kk.notRegistered : errText(e))}</p>
+        ${e.status === 403 ? `<h2 class="title" style="font-size:28px">${esc(id)}</h2><p class="mut">${esc(TEXTS.ru.notRegistered)}<br>${esc(TEXTS.en.notRegistered)}</p>` : ''}</div>`;
       return;
     }
-    if (!LTC.store.get('ltc-lang')) state.lang = state.me.lang || 'ru';        // язык из реестра: Local → RU, Foreign → EN
+    if (!LTC.store.get('ltc-lang')) state.lang = state.me.lang === 'en' ? 'en' : 'kk';   // по умолчанию: Local → ҚАЗ, Foreign → ENG
     state.tab = tabsFor(state.me)[0];
     shell();
     flush();

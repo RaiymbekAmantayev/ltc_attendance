@@ -25,7 +25,7 @@
   LTC.monthStart = iso => iso.slice(0, 7) + '-01';
   LTC.fmtDate = (iso, lang = 'ru') => {
     if (!iso) return '';
-    return new Date(iso + 'T00:00:00Z').toLocaleDateString(lang === 'en' ? 'en-GB' : 'ru-RU', { day: 'numeric', month: 'short', weekday: 'short', timeZone: 'UTC' });
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString(({ en: 'en-GB', kk: 'kk-KZ' })[lang] || 'ru-RU', { day: 'numeric', month: 'short', weekday: 'short', timeZone: 'UTC' });
   };
   LTC.short = iso => (iso || '').slice(5).split('-').reverse().join('.');
 
