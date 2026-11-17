@@ -19,10 +19,34 @@ beforeEach(async () => { h.mock.reset(); await h.db.query('DELETE FROM submissio
 const save = (list, personal, topic = 'Unit 3') => api.request('POST', '/api/lessons',
   { tg: TG, body: { key: h.uuid(), groupId: '31', date: h.WED, topic, homework: 'Ex. 1', personal, students: list } });
 
-test('/me отдаёт 6 категорий доп. теста', async () => {
+test('/me отдаёт 11 категорий доп. теста', async () => {
   const me = (await api.request('GET', '/api/me', { tg: TG })).json;
   assert.deepEqual(me.personalTests.map(c => [c.id, c.name, c.types.length]),
-    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3], [45, 'File Test NEF', 12], [2, 'Quick Test NEF', 1]]);
+    [[1, 'Progress Test', 1], [4, 'Final Test', 1], [6, 'Entry test', 6], [5, 'Revise&Check', 3], [45, 'File Test NEF', 12], [2, 'Quick Test NEF', 1],
+      [46, 'Placement Test', 1], [47, 'Quick test', 1], [48, 'Language Test', 1], [49, 'Mid-Year Test', 1], [50, 'End-of-Year Test', 1]]);
+});
+
+test('Новые тесты «Общий» (кат. 46–50, тип 149–153) пишутся со своими навыками, Communication — №22', async () => {
+  const cases = [
+    [46, 149, { 4: 20, 3: 20, 22: 10 }],
+    [47, 150, { 4: 20, 3: 15 }],
+    [48, 151, { 4: 15, 3: 10, 22: 5 }],
+    [49, 152, { 4: 15, 3: 15, 1: 6, 22: 8, 2: 6 }],
+    [50, 153, { 4: 15, 3: 15, 1: 6, 22: 8, 2: 6 }],
+  ];
+  for (const [categoryId, testTypeId, skills] of cases) {
+    h.mock.reset(); await h.db.query('DELETE FROM submissions');
+    const res = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: skills }], { categoryId, testTypeId });
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(h.mock.state.personal.length, 1);
+    assert.equal(h.mock.state.personal[0].testTypeId, testTypeId);
+    const sent = [...h.mock.state.personal[0].skills].sort((a, b) => a.skillId - b.skillId);
+    assert.deepEqual(sent, Object.entries(skills).map(([id, score]) => ({ skillId: Number(id), score })));
+  }
+  // баллы выше максимума не принимаются
+  await h.db.query('DELETE FROM submissions');
+  const over = await save([{ id: '3101', status: 'present', skills: DAILY, personalSkills: { 4: 20, 3: 16 } }], { categoryId: 47, testTypeId: 150 });
+  assert.notEqual(over.status, 200);
 });
 
 test('Progress Test пишется тем, кому введены баллы; остальным — только ежедневный', async () => {

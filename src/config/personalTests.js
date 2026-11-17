@@ -8,6 +8,7 @@ const FULL = [k(1, 'Listening', 10), k(2, 'Reading', 15), k(3, 'Grammar', 40), k
 const ENTRY = [k(3, 'Grammar', 25), k(4, 'Vocabulary', 25)];
 const NEF = [k(1, 'Listening', 10), k(2, 'Reading', 15), k(3, 'Grammar', 20), k(4, 'Vocabulary', 20),
   k(5, 'Pronunciation', 10), k(6, 'Speaking', 15), k(7, 'Writing', 10), k(16, 'Practical English', 5)];
+const YEAR = [k(4, 'Vocabulary', 15), k(3, 'Grammar', 15), k(1, 'Listening', 6), k(22, 'Communication', 8), k(2, 'Reading', 6)];
 
 module.exports = {
   /** Поле discipline в AddEditPersonalTestResult. */
@@ -37,6 +38,17 @@ module.exports = {
       ({ id: 137 + i, name: `File ${i + 1}`, skills: NEF })) },
     { id: 2, name: 'Quick Test NEF', types: [
       { id: 2, name: 'Quick Test NEF', skills: [k(3, 'Grammar', 20), k(4, 'Vocabulary', 20), k(5, 'Pronunciation', 10)] }] },
+    // Тесты с типом «Общий» в HollyHop; 22 — Communication.
+    { id: 46, name: 'Placement Test', types: [
+      { id: 149, name: 'Общий', skills: [k(4, 'Vocabulary', 20), k(3, 'Grammar', 20), k(22, 'Communication', 10)] }] },
+    { id: 47, name: 'Quick test', types: [
+      { id: 150, name: 'Общий', skills: [k(4, 'Vocabulary', 20), k(3, 'Grammar', 15)] }] },
+    { id: 48, name: 'Language Test', types: [
+      { id: 151, name: 'Общий', skills: [k(4, 'Vocabulary', 15), k(3, 'Grammar', 10), k(22, 'Communication', 5)] }] },
+    { id: 49, name: 'Mid-Year Test', types: [
+      { id: 152, name: 'Общий', skills: YEAR }] },
+    { id: 50, name: 'End-of-Year Test', types: [
+      { id: 153, name: 'Общий', skills: YEAR }] },
   ],
 
   /** Тип теста категории (в т.ч. по прежнему id из legacyIds) или null, если такой пары нет. */

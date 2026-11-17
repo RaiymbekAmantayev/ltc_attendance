@@ -139,6 +139,11 @@ curl -s -H "Authorization: Bearer $ATT_TOKEN" \
 | 5 | Revise&Check | по главам / Advanced / Upper-Intermediate |
 | 45 | File Test NEF | File 1 … File 12 |
 | 2 | Quick Test NEF | Quick Test NEF |
+| 46 | Placement Test | Общий (тип 149) |
+| 47 | Quick test | Общий (тип 150) |
+| 48 | Language Test | Общий (тип 151) |
+| 49 | Mid-Year Test | Общий (тип 152) |
+| 50 | End-of-Year Test | Общий (тип 153) |
 
 Навыки и максимумы каждого типа — в `GET /meta` → `test_categories`.
 
