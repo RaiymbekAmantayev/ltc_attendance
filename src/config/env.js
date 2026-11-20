@@ -23,6 +23,7 @@ module.exports = {
   timezone: env.APP_TZ || 'Asia/Almaty',
   hollihop: {
     mock,
+    readOnly: flag('HH_READONLY'),                              // локалка с боевым ключом: Get* — в HollyHop, запись не отправляется
     domain: String(env.HH_DOMAIN || '').split('#')[0].trim(),   // на случай комментария в строке
     authKey: String(env.HH_AUTHKEY || '').trim(),
   },

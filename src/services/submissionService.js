@@ -119,7 +119,10 @@ exports.save = async (teacher, { key, groupId, date, topic, homework, ktpTopicId
     return exports.push(key);                                              // повтор того же нажатия
   }
   const lang = langOf(teacher);
-  if (existing.some(r => r.teacher_lang === lang)) throw new AppError(409, 'lesson_lang_taken');
+  // Тот же тип занят — только если это то же занятие (то же время начала). В группе бывает два занятия в день у двух местных
+  // (09:30 — один, 10:20 — другой): это разные уроки. Старые отметки без времени считаем тем же занятием.
+  const sameLesson = r => { const at = Submission.parse(r.payload)?.dateTime; return !at || at === payload.dateTime; };
+  if (existing.some(r => r.teacher_lang === lang && sameLesson(r))) throw new AppError(409, 'lesson_lang_taken');
   // Старые отметки занимали слоты по порядку: если «свой» слот уже занят отметкой другого типа — берём свободный.
   const slot = [SLOT_BY_LANG[lang], 3 - SLOT_BY_LANG[lang]].find(n => !existing.some(r => r.slot === n));
   if (!slot) throw new AppError(409, 'lesson_full');
@@ -138,7 +141,7 @@ exports.save = async (teacher, { key, groupId, date, topic, homework, ktpTopicId
     if (!saved || saved.teacher_id !== teacher.id) {
       const now = await Submission.listByGroupAndDate(groupId, date);
       if (now.some(r => r.teacher_id === teacher.id)) throw new AppError(409, 'already_saved');
-      throw new AppError(409, now.some(r => r.teacher_lang === lang) ? 'lesson_lang_taken' : 'lesson_full');
+      throw new AppError(409, now.some(r => r.teacher_lang === lang && sameLesson(r)) ? 'lesson_lang_taken' : 'lesson_full');
     }
   }
   return exports.push(key);

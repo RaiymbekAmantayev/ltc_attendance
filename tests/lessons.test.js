@@ -128,6 +128,27 @@ test('замена местного: местный слот занят заме
   assert.deepEqual(rows.map(r => [r.teacher_id, r.slot]), [[t3, 1], [t2, 2]]);
 });
 
+test('два местных в одной группе в разное время (09:30 и 10:20) — каждый отмечает своё занятие', async () => {
+  // как 1581 в HollyHop по пятницам: 09:30–10:15 и 10:20–11:05 — оба преподавателя местные
+  const unit = { Id: 9007, Name: 'Two locals Pre-Intermediate', OfficeOrCompanyId: 7, OfficeOrCompanyName: 'Абая', StudentsCount: 3, Vacancies: 5, Level: 'Pre-Intermediate', Discipline: 'English',
+    ScheduleItems: [
+      { Weekdays: 21, BeginTime: '10:20', EndTime: '11:05', TeacherIds: [103], Teacher: 'Сатпаева Алия' },
+      { Weekdays: 21, BeginTime: '09:30', EndTime: '10:15', TeacherIds: [101], Teacher: 'Иванова Анна' },
+    ] };
+  h.mock.EDUNITS.push(unit);
+  try {
+    const list = (await students('9007')).map(s => ({ id: s.id, status: 'present', skills: DAILY }));
+    const late = await api.request('POST', '/api/lessons', { tg: TG.third, body: body(h.uuid(), '9007', list) });
+    assert.equal(late.json.status, 'done', JSON.stringify(late.json));
+    const early = await api.request('POST', '/api/lessons', { tg: TG.teacher, body: body(h.uuid(), '9007', list) });
+    assert.equal(early.json.status, 'done', JSON.stringify(early.json));
+    const [rows] = await h.db.query('SELECT teacher_id, JSON_UNQUOTE(JSON_EXTRACT(payload, "$.dateTime")) at FROM submissions WHERE group_id="9007" ORDER BY at');
+    assert.deepEqual(rows.map(r => [r.teacher_id, r.at]), [[t1, `${h.WED}T09:30:00`], [t3, `${h.WED}T10:20:00`]]);
+  } finally {
+    h.mock.EDUNITS.splice(h.mock.EDUNITS.indexOf(unit), 1);
+  }
+});
+
 test('занятия идут по порядку — с утра до вечера', async () => {
   const lessons = (await api.request('GET', `/api/lessons?date=${h.WED}`, { tg: TG.teacher })).json;
   assert.deepEqual(lessons.map(g => g.time), ['09:00–10:00', '10:00–11:30', '15:00–16:30']);

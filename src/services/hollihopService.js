@@ -32,6 +32,10 @@ async function throttle() {
 
 async function send(method, payload) {
   if (hollihop.mock) return mock.respond(method, payload);
+  if (hollihop.readOnly && !method.startsWith('Get')) {                 // HH_READONLY: запись не уходит, ответ — как у демо-режима
+    console.log(`[HH_READONLY] ${method} не отправлен в HollyHop`);
+    return mock.respond(method, payload);
+  }
   const url = `https://${hollihop.domain}.t8s.ru/Api/V2/${method}?authkey=${encodeURIComponent(hollihop.authKey)}`;
   const response = await fetch(url, {
     method: 'POST',
