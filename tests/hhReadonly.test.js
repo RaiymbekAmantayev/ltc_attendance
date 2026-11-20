@@ -11,6 +11,7 @@ const DAILY = { 13: 5, 9: 5, 10: 5 };
 const PROGRESS = { 1: 10, 2: 15, 3: 40, 4: 40, 5: 20, 6: 15, 7: 10, 21: 2 };
 const sent = [];                                                 // что ушло «в сеть» HollyHop
 const realFetch = global.fetch;
+const parse = v => (typeof v === 'string' ? JSON.parse(v) : v);   // MySQL отдаёт JSON объектом, MariaDB — строкой
 
 before(async () => {
   await h.setupDb();
@@ -45,7 +46,7 @@ test('отметка с тестом, доп. тестом и коинами —
   assert.deepEqual([h.mock.state.writes.length, h.mock.state.tests.length, h.mock.state.personal.length], [0, 0, 0]);
 
   const [[row]] = await h.db.query('SELECT hh_results FROM submissions WHERE group_id = "31"');
-  const results = JSON.parse(row.hh_results);
+  const results = parse(row.hh_results);
   assert.deepEqual(Object.keys(results).sort(), ['p:3101', 'r:3101']);
   assert.ok(Object.values(results).every(id => id < 0), 'условные Id не совпадают с настоящими');
 });
@@ -62,5 +63,5 @@ test('правка по одобренному запросу отметки с 
   assert.equal(res.json.status, 'done', JSON.stringify(res.json));
   assert.deepEqual(sent.filter(m => !m.startsWith('Get')), []);
   const [[row]] = await h.db.query('SELECT hh_results FROM submissions WHERE group_id = "31"');
-  assert.deepEqual(JSON.parse(row.hh_results), { 'r:3101': 555001, 'p:3101': 555002 }, 'Id прежние');
+  assert.deepEqual(parse(row.hh_results), { 'r:3101': 555001, 'p:3101': 555002 }, 'Id прежние');
 });
