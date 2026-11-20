@@ -30,11 +30,15 @@ async function throttle() {
   if (wait) await sleep(wait);
 }
 
+let readOnlyIds = 0;
 async function send(method, payload) {
   if (hollihop.mock) return mock.respond(method, payload);
-  if (hollihop.readOnly && !method.startsWith('Get')) {                 // HH_READONLY: запись не уходит, ответ — как у демо-режима
+  // HH_READONLY: запись не уходит и ничего не проверяет — просто «успех». Правка теста (с id) возвращает тот же Id,
+  // новый результат — условный отрицательный Id (чтобы не совпасть с настоящими Id из базы, скопированной с прода).
+  if (hollihop.readOnly && !method.startsWith('Get')) {
     console.log(`[HH_READONLY] ${method} не отправлен в HollyHop`);
-    return mock.respond(method, payload);
+    const id = method === 'AddEditPersonalTestResult' ? (payload.id ?? -(++readOnlyIds)) : undefined;
+    return { status: 200, body: { Success: true, ...(id !== undefined ? { Id: id } : {}) }, headers: {} };
   }
   const url = `https://${hollihop.domain}.t8s.ru/Api/V2/${method}?authkey=${encodeURIComponent(hollihop.authKey)}`;
   const response = await fetch(url, {
