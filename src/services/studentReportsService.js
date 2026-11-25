@@ -55,8 +55,8 @@ function resultsOf(s, p) {
   }
   const choice = s.personalSkills && p.personal && personalTests.find(p.personal.categoryId, p.personal.testTypeId);
   if (choice) {
-    const max = choice.type.skills.reduce((a, k) => a + k.max, 0);
-    if (max) out.push(Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0) / max);
+    const { total, max } = personalTests.score(choice.type, s.personalSkills);
+    if (max) out.push(total / max);
   }
   return out;
 }

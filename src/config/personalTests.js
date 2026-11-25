@@ -17,7 +17,8 @@ module.exports = {
   /** id — категория теста, types — типы теста HollyHop (testTypeId) со своими навыками. */
   categories: [
     { id: 1, name: 'Progress Test', types: [
-      { id: 1, name: 'Progress Test', skills: [...FULL, k(21, 'Attendance', 2)] }] },
+      // Attendance обязателен для HollyHop, но в отчётах не показывается и в результат не входит (report: false).
+      { id: 1, name: 'Progress Test', skills: [...FULL, { ...k(21, 'Attendance', 2), report: false }] }] },
     { id: 4, name: 'Final Test', types: [
       // Тест «Общий» — testTypeId 4. Раньше по ошибке слали 1 (это Progress Test, требует Attendance) — старые отметки читаются по legacyIds.
       { id: 4, legacyIds: [1], name: 'Final Test', skills: FULL }] },
@@ -50,6 +51,14 @@ module.exports = {
     { id: 50, name: 'End-of-Year Test', types: [
       { id: 153, name: 'Общий', skills: YEAR }] },
   ],
+
+  /** Результат для отчётов: сумма баллов и максимум без навыков с report: false. */
+  score(type, values) {
+    const hidden = new Set(type.skills.filter(s => s.report === false).map(s => String(s.id)));
+    const total = Object.entries(values || {}).filter(([id]) => !hidden.has(String(id)))
+      .reduce((a, [, v]) => a + Number(v || 0), 0);
+    return { total, max: type.skills.filter(s => s.report !== false).reduce((a, s) => a + s.max, 0) };
+  },
 
   /** Тип теста категории (в т.ч. по прежнему id из legacyIds) или null, если такой пары нет. */
   find(categoryId, testTypeId) {

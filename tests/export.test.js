@@ -89,8 +89,8 @@ test('выгрузка: период проверяется, неизвестн�
 
 test('тесты учеников: доп. тест по навыкам с % и сводкой по уровням, средние Daily test; ФИО старых отметок — из HollyHop', async () => {
   const roster = (await api.request('GET', `/api/groups/9003/students?date=${h.WED}`, { tg: 6001 })).json.students;
-  const full = { 1: 10, 2: 15, 3: 40, 4: 40, 5: 20, 6: 15, 7: 10, 21: 2 };              // максимум Progress Test — 152
-  const weak = { 1: 0, 2: 5, 3: 20, 4: 20, 5: 10, 6: 5, 7: 5, 21: 1 };                 // 66 из 152
+  const full = { 1: 10, 2: 15, 3: 40, 4: 40, 5: 20, 6: 15, 7: 10, 21: 2 };              // в HollyHop 152; в отчёте без Attendance — 150
+  const weak = { 1: 0, 2: 5, 3: 20, 4: 20, 5: 10, 6: 5, 7: 5, 21: 1 };                 // в отчёте 65 из 150
   const saved = await api.request('POST', '/api/lessons', { tg: 6001, body: { key: h.uuid(), groupId: '9003', date: h.WED, topic: 'Unit 1', homework: 'Ex. 1',
     personal: { categoryId: 1, testTypeId: 1 },
     students: roster.map((s, i) => ({ id: s.id, status: 'present', skills: { 13: 5, 9: 4, 10: 3 }, personalSkills: i ? weak : full })) } });
@@ -103,8 +103,9 @@ test('тесты учеников: доп. тест по навыкам с % и 
   const rep = (await get(`/admin-api/export/tests?from=${MON}&to=${SUN}`)).json;
   const progress = rep.sheets.find(s => s.key === 'p1');
   assert.equal(progress.name, 'Progress Test');
+  assert.ok(!progress.skills.some(k => k.name === 'Attendance'), 'Attendance в отчёте не показываем');
   assert.deepEqual(progress.rows.map(r => [r.student, r.level, r.total, r.max, r.pct]),
-    [[roster[0].name, 'Upper Intermediate', 152, 152, 1], [roster[1].name, 'Upper Intermediate', 66, 152, 0.4342]].sort((a, b) => a[0].localeCompare(b[0], 'ru')));
+    [[roster[0].name, 'Upper Intermediate', 150, 150, 1], [roster[1].name, 'Upper Intermediate', 65, 150, 0.4333]].sort((a, b) => a[0].localeCompare(b[0], 'ru')));
   assert.deepEqual(rep.summary, [{ key: 'p1', name: 'Progress Test', levels: [{ level: 'Upper Intermediate', count: 2, good: 1, mid: 0, bad: 1 }] }]);
 
   const daily = rep.sheets.find(s => s.key === 'daily');
@@ -127,7 +128,7 @@ test('тесты → по преподавателям и посещаемост
     [h.uuid(), teacher, group, `G${group}`, date, slot, JSON.stringify({ topic: 'x', testTypeId: 132, students, ...extra }), '[]', 'done']);
   const st = (id, name, status, hw = 5) => ({ id, name, status, ...(status === 'present' ? { skills: { 8: 45, 13: hw, 9: hw, 10: hw } } : {}) });
   h.mock.state.rosters['1'] = ['1', '2', '3'].map(id => ({ StudentClientId: Number(id), BeginDate: '2026-01-01' }));   // все трое сейчас в группе
-  // Иванова, группа 1: Аня — 5/5 и 4/5 (90%), Боря — 1 пропуск из 2 и 70% (+ доп. тест 66/152 → в среднем 57%), Вика — 3/5 (60%).
+  // Иванова, группа 1: Аня — 5/5 и 4/5 (90%), Боря — 1 пропуск из 2 и 70% (+ доп. тест 65/150 без Attendance → в среднем 57%), Вика — 3/5 (60%).
   await insert(local, '1', '2026-09-07', 1, [st('1', 'Аня', 'present'), st('2', 'Боря', 'absent'), st('3', 'Вика', 'present', 3)]);
   await insert(local, '1', '2026-09-09', 1, [st('1', 'Аня', 'present', 4), { ...st('2', 'Боря', 'present', 3.5),
     personalSkills: { 1: 0, 2: 5, 3: 20, 4: 20, 5: 10, 6: 5, 7: 5, 21: 1 } }, st('3', 'Вика', 'absent')], { personal: { categoryId: 1, testTypeId: 1 } });
@@ -138,7 +139,7 @@ test('тесты → по преподавателям и посещаемост
   const res = (await get(`/admin-api/export/tests?${range}`)).json;
   const ivanova = res.byTeacher.find(t => t.id === String(local));
   assert.deepEqual(ivanova.rows.map(r => [r.student, r.results, r.pct, r.band]),
-    [['Аня', 2, 0.9, 'good'], ['Боря', 2, 0.5671, 'bad'], ['Вика', 1, 0.6, 'bad']]);
+    [['Аня', 2, 0.9, 'good'], ['Боря', 2, 0.5667, 'bad'], ['Вика', 1, 0.6, 'bad']]);
   assert.equal(res.byTeacher.find(t => t.id === String(foreign)), undefined, 'без тестов преподавателя нет в списке');
 
   const [all, ...teachers] = res.attendance.scopes;

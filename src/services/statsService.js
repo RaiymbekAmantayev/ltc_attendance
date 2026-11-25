@@ -29,11 +29,12 @@ function personalTestsOf(rows) {
     const p = Submission.parse(row.payload);
     const found = p.personal && personalTests.find(p.personal.categoryId, p.personal.testTypeId);
     if (!found) continue;
-    const max = found.type.skills.reduce((a, k) => a + k.max, 0);
     const cat = byId.get(found.category.id);
     for (const s of p.students) {
-      if (!s.personalSkills || !max) continue;
-      const good = Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0) / max >= 0.8 ? 1 : 0;
+      if (!s.personalSkills) continue;
+      const { total: sum, max } = personalTests.score(found.type, s.personalSkills);
+      if (!max) continue;
+      const good = sum / max >= 0.8 ? 1 : 0;
       total.count++; total.good += good;
       cat.count++; cat.good += good;
     }

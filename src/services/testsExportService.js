@@ -92,8 +92,8 @@ exports.report = async (from, to, filters = {}) => {
         if (!personal.has(category.id)) personal.set(category.id, { key: `p${category.id}`, name: category.name, category, extra: [], rows: [] });
         const sheet = personal.get(category.id);
         for (const id of Object.keys(s.personalSkills)) if (!type.skills.some(k => String(k.id) === id) && !sheet.extra.includes(id)) sheet.extra.push(id);
-        const total = round(Object.values(s.personalSkills).reduce((a, v) => a + Number(v || 0), 0));
-        const max = type.skills.reduce((a, k) => a + k.max, 0);
+        const score = personalTests.score(type, s.personalSkills);
+        const total = round(score.total), max = score.max;
         sheet.rows.push({ ...base, date, test: type.name, scores: s.personalSkills, total, max, pct: max ? round(total / max, 4) : 0 });
       }
 
@@ -115,8 +115,10 @@ exports.report = async (from, to, filters = {}) => {
     const sheet = personal.get(c.id);
     // Колонки навыков: все навыки типов категории по порядку + навыки старых отметок, которых в настройке уже нет.
     const skills = [];
-    for (const t of c.types) for (const k of t.skills) if (!skills.some(x => x.id === k.id)) skills.push({ id: k.id, name: k.name, maxes: new Set() });
-    for (const t of c.types) for (const k of t.skills) skills.find(x => x.id === k.id).maxes.add(k.max);
+    // Навыки с report: false (Attendance в Progress Test) в отчёт не выводим.
+    const shown = t => t.skills.filter(k => k.report !== false);
+    for (const t of c.types) for (const k of shown(t)) if (!skills.some(x => x.id === k.id)) skills.push({ id: k.id, name: k.name, maxes: new Set() });
+    for (const t of c.types) for (const k of shown(t)) skills.find(x => x.id === k.id).maxes.add(k.max);
     for (const id of sheet.extra) skills.push({ id: Number(id), name: `Навык ${id}`, maxes: new Set() });
     return {
       key: sheet.key, name: sheet.name, info: [['date', 'Дата'], ['test', 'Тест']],

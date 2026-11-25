@@ -158,7 +158,7 @@
   function lessonCard(l) {
     const t = T();
     const status = queue.has(l.id, state.date) ? 'pending' : l.status;
-    const meta = [l.branch, l.days, l.students != null ? `${l.students} ${t.students}` : ''].filter(Boolean).join(' · ');
+    const meta = [l.id != null ? `ID ${l.id}` : '', l.branch, l.days, l.students != null ? `${l.students} ${t.students}` : ''].filter(Boolean).join(' · ');
     return `
       <button class="tcard" data-group="${esc(l.id)}" data-name="${esc(l.name)}">
         <div class="tcard-top">
